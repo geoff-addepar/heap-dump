@@ -66,6 +66,7 @@ import sun.jvm.hotspot.runtime.BasicType;
 import sun.jvm.hotspot.runtime.JNIHandleBlock;
 import sun.jvm.hotspot.runtime.JavaThread;
 import sun.jvm.hotspot.runtime.VM;
+import sun.jvm.hotspot.types.Type;
 import sun.jvm.hotspot.utilities.AbstractHeapGraphWriter;
 import sun.jvm.hotspot.utilities.Assert;
 
@@ -425,6 +426,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     dbg = vm.getDebugger();
     objectHeap = vm.getObjectHeap();
     symTbl = vm.getSymbolTable();
+    Type klassType = vm.lookupType("Klass");
+    klassJavaMirrorField = new OopField(klassType.getOopField("_java_mirror"), 0L);
 
     OBJ_ID_SIZE = (int) vm.getOopSize();
 
@@ -587,11 +590,11 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
   private void writeClassDumpRecord(Klass k) throws IOException {
     out.writeByte((byte)HPROF_GC_CLASS_DUMP);
-    writeObjectID(k.getJavaMirror());
+    writeObjectIDForKlass(k);
     out.writeInt(DUMMY_STACK_TRACE_ID);
     Klass superKlass = k.getJavaSuper();
     if (superKlass != null) {
-      writeObjectID(superKlass.getJavaMirror());
+      writeObjectIDForKlass(superKlass);
     } else {
       writeObjectID(null);
     }
@@ -724,7 +727,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     writeObjectID(array);
     out.writeInt(DUMMY_STACK_TRACE_ID);
     out.writeInt((int) array.getLength());
-    writeObjectID(array.getKlass().getJavaMirror());
+    writeObjectIDForKlass(array.getKlass());
     final int length = (int) array.getLength();
     for (int index = 0; index < length; index++) {
       OopHandle handle = array.getOopHandleAt(index);
@@ -854,7 +857,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     out.writeByte((byte) HPROF_GC_INSTANCE_DUMP);
     writeObjectID(instance);
     out.writeInt(DUMMY_STACK_TRACE_ID);
-    writeObjectID(klass.getJavaMirror());
+    writeObjectIDForKlass(klass);
 
     if (Assert.ASSERTS_ENABLED) {
       Assert.that(cd != null, "can not get class data for " + klass.getName().asString() + klass.getAddress());
@@ -1022,10 +1025,9 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   private void writeClassLoadRecord(Klass k) throws IOException {
-    Instance clazz = k.getJavaMirror();
     writeHeader(HPROF_LOAD_CLASS, 2 * (OBJ_ID_SIZE + 4));
     out.writeInt(classSerialNum);
-    writeObjectID(clazz);
+    writeObjectIDForKlass(k);
     out.writeInt(DUMMY_STACK_TRACE_ID);
     writeSymbolID(k.getName());
     classSerialNum++;
@@ -1047,6 +1049,12 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
     // timestamp -- file creation time.
     out.writeLong(System.currentTimeMillis());
+  }
+
+  private void writeObjectIDForKlass(Klass klass) throws IOException {
+    OopHandle handle = klassJavaMirrorField.getValueAsOopHandle(klass);
+    long address = getAddressValue(handle);
+    writeObjectID(address);
   }
 
   // writes unique ID for an object
@@ -1135,6 +1143,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   private Debugger dbg;
   private ObjectHeap objectHeap;
   private SymbolTable symTbl;
+  private OopField klassJavaMirrorField;
 
   // oopSize of the debuggee
   private int OBJ_ID_SIZE;
