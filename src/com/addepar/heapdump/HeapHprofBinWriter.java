@@ -30,9 +30,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.Debugger;
@@ -42,6 +44,7 @@ import sun.jvm.hotspot.memory.SystemDictionary;
 import sun.jvm.hotspot.oops.BooleanField;
 import sun.jvm.hotspot.oops.ByteField;
 import sun.jvm.hotspot.oops.CharField;
+import sun.jvm.hotspot.oops.DefaultHeapVisitor;
 import sun.jvm.hotspot.oops.DoubleField;
 import sun.jvm.hotspot.oops.Field;
 import sun.jvm.hotspot.oops.FloatField;
@@ -514,13 +517,9 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
   @Override
   protected void writeHeapRecordEpilogue() throws IOException {
-    writeHeapRecordEpilogue(false);
-  }
-
-  protected void writeHeapRecordEpilogue(boolean force) throws IOException {
-    if (useSegmentedHeapDump && currentSegmentStart != 0) {
+    if (useSegmentedHeapDump) {
       out.flush();
-      if (force || (fos.getChannel().position() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
+      if ((fos.getChannel().position() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
         fillInHeapRecordLength();
         currentSegmentStart = 0;
       }
@@ -584,7 +583,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     if (reflectedKlass == null) {
       writeInstance(instance);
     } else if (!classDataCache.containsKey(reflectedKlass) && reflectedKlass instanceof InstanceKlass) {
-      writeLambdaClassInfo((InstanceKlass) reflectedKlass);
+      writeClassDumpRecord((InstanceKlass) reflectedKlass);
     }
   }
 
@@ -850,7 +849,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         cd = new ClassData(instSize, fields);
         classDataCache.put(ik, cd);
 
-        writeLambdaClassInfo(ik);
+        writeClassDumpRecord(ik);
       }
     }
 
@@ -868,17 +867,6 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     for (Iterator itr = fields.iterator(); itr.hasNext();) {
       writeField((Field) itr.next(), instance);
     }
-  }
-
-  private void writeLambdaClassInfo(InstanceKlass ik) throws IOException {
-    writeHeapRecordEpilogue(true);
-
-    writeSymbol(ik.getName());
-    writeClassLoadRecord(ik);
-
-    writeHeapRecordPrologue();
-
-    writeClassDumpRecord(ik);
   }
 
   //-- Internals only below this point
@@ -1007,12 +995,14 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   private void writeClasses() throws IOException {
+    final Set klasses = new HashSet();
     // write class list (id, name) association
     SystemDictionary sysDict = VM.getVM().getSystemDictionary();
     try {
       sysDict.allClassesDo(new SystemDictionary.ClassVisitor() {
         public void visit(Klass k) {
           try {
+            klasses.add(k);
             writeClassLoadRecord(k);
           } catch (IOException exp) {
             throw new RuntimeException(exp);
@@ -1022,6 +1012,32 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     } catch (RuntimeException re) {
       handleRuntimeException(re);
     }
+
+    final Symbol javaLangClass = symTbl.probe("java/lang/Class");
+    System.out.println("Dumping lambda classes");
+    objectHeap.iterate(new DefaultHeapVisitor() {
+      @Override
+      public boolean doObj(Oop oop) {
+        if (oop instanceof Instance) {
+          Instance instance = (Instance)oop;
+          Klass klass = instance.getKlass();
+          Symbol name = klass.getName();
+          if (name.equals(javaLangClass)) {
+            try {
+              Klass reflectedKlass = java_lang_Class.asKlass(instance);
+              if (reflectedKlass != null && !klasses.contains(reflectedKlass)) {
+                klasses.add(reflectedKlass);
+                writeClassLoadRecord(reflectedKlass);
+              }
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+          }
+        }
+        return false;
+      }
+    });
+    System.out.println("Done dumping lambda classes");
   }
 
   private void writeClassLoadRecord(Klass k) throws IOException {
@@ -1052,7 +1068,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   private void writeObjectIDForKlass(Klass klass) throws IOException {
-    OopHandle handle = klassJavaMirrorField.getValueAsOopHandle(klass);
+    OopHandle handle = klass != null ? klassJavaMirrorField.getValueAsOopHandle(klass) : null;
     long address = getAddressValue(handle);
     writeObjectID(address);
   }
