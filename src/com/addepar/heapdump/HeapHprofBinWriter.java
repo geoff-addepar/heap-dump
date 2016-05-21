@@ -518,8 +518,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   @Override
   protected void writeHeapRecordEpilogue() throws IOException {
     if (useSegmentedHeapDump) {
-      out.flush();
-      if ((fos.getChannel().position() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
+      if ((out.size() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
         fillInHeapRecordLength();
         currentSegmentStart = 0;
       }
@@ -527,6 +526,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   private void fillInHeapRecordLength() throws IOException {
+    out.flush();
 
     // now get current position to calculate length
     long dumpEnd = fos.getChannel().position();
