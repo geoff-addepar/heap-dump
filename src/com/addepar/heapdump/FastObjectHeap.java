@@ -4,10 +4,10 @@ import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.OopHandle;
 import sun.jvm.hotspot.memory.SymbolTable;
 import sun.jvm.hotspot.oops.FastInstance;
+import sun.jvm.hotspot.oops.FastInstanceKlass;
+import sun.jvm.hotspot.oops.FastInstanceMirrorKlass;
 import sun.jvm.hotspot.oops.FastObjArray;
 import sun.jvm.hotspot.oops.FastTypeArray;
-import sun.jvm.hotspot.oops.InstanceKlass;
-import sun.jvm.hotspot.oops.InstanceMirrorKlass;
 import sun.jvm.hotspot.oops.IntField;
 import sun.jvm.hotspot.oops.Klass;
 import sun.jvm.hotspot.oops.MetadataField;
@@ -76,11 +76,11 @@ public class FastObjectHeap extends ObjectHeap {
       Symbol name = Symbol.create(klassAddress.getAddressAt(klassName.getOffset()));
       if (javaLangClass.equals(name)) {
         // instance of java.lang.Class, which has special handling for static members
-        return new FastInstance(handle, this, new InstanceMirrorKlass(klassAddress));
+        return new FastInstance(handle, this, new FastInstanceMirrorKlass(klassAddress));
       } else {
         // instance of anything else. we don't handle InstanceRefKlass or InstanceClassLoaderKlass
         // because they contain no extra logic
-        return new FastInstance(handle, this, new InstanceKlass(klassAddress));
+        return new FastInstance(handle, this, new FastInstanceKlass(klassAddress));
       }
     }
   }
