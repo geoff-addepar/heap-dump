@@ -20,8 +20,22 @@ java.lang.NullPointerException
 	at org.eclipse.mat.hprof.Pass2Parser.read(Pass2Parser.java:89)
 ```
 
+# Usage
+First you need a core file. You can get that using:
+```
+gcore <pid>
+```
+You may need `sudo` depending on your [ptrace_scope](http://askubuntu.com/questions/41629/after-upgrade-gdb-wont-attach-to-process) settings.
+
+To turn a core file into a heap dump:
+```
+java -cp heap_dump.jar:/usr/lib/jvm/java-8-oracle/lib/sa-jdi.jar \
+  com.addepar.heapdump.HeapDumper -f <output.hprof> /usr/bin/java <corefile>
+```
+Like `jmap`, `jstack` and the other Serviceability Agent tools, you must run this against the same version of java that was used to generate the core file. 
+
 # Status
-This is a one-day hack. It has not been extensively tested.
+This is a two-day hack. It has not been extensively tested.
 
 # License
 I copied most of the code directly out of the JDK, and it retains the original GPLv2 license from there. Neither I nor Oracle is responsible for any damage it causes. See the LICENSE file for details.
