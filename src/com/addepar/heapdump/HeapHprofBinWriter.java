@@ -424,7 +424,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   public synchronized void write(String fileName) throws IOException {
     // open file stream and create buffered data output stream
     fos = new FileOutputStream(fileName);
-    out = new DataOutputStream(new BufferedOutputStream(fos));
+    countOut = new CountingOutputStream(new BufferedOutputStream(fos));
+    out = new DataOutputStream(countOut);
 
     VM vm = VM.getVM();
     dbg = vm.getDebugger();
@@ -504,6 +505,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     javaLangString = symTbl.probe("java/lang/String");
     javaLangThread = symTbl.probe("java/lang/Thread");
     try {
+      System.out.println("Dumping heap");
       objectHeap.iterate(new DefaultHeapVisitor() {
         public void prologue(long usedSize) {
           try {
@@ -569,6 +571,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
           }
         }
       });
+      System.out.println("Done dumping heap");
 
       // write JavaThreads
       writeJavaThreads();
@@ -592,8 +595,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
       // remember position of dump length, we will fixup
       // length later - hprof format requires length.
-      out.flush();
-      currentSegmentStart = fos.getChannel().position();
+      currentSegmentStart = countOut.getCount();
 
       // write dummy length of 0 and we'll fix it later.
       out.writeInt(0);
@@ -603,7 +605,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   @Override
   protected void writeHeapRecordEpilogue() throws IOException {
     if (useSegmentedHeapDump) {
-      if ((fos.getChannel().position() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
+      if ((countOut.getCount() - currentSegmentStart - 4) >= HPROF_SEGMENTED_HEAP_DUMP_SEGMENT_SIZE) {
         fillInHeapRecordLength();
         currentSegmentStart = 0;
       }
@@ -611,10 +613,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   private void fillInHeapRecordLength() throws IOException {
-    out.flush();
-
     // now get current position to calculate length
-    long dumpEnd = fos.getChannel().position();
+    long dumpEnd = countOut.getCount();
 
     // calculate length of heap data
     long dumpLenLong = (dumpEnd - currentSegmentStart - 4L);
@@ -624,8 +624,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
       throw new RuntimeException("Heap segment size overflow.");
     }
 
-    // Save the current position
-    long currentPosition = fos.getChannel().position();
+    // flush to ensure the surrounding bytes have been written
+    out.flush();
 
     // seek the position to write length
     fos.getChannel().position(currentSegmentStart);
@@ -639,7 +639,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     fos.write((dumpLen >>> 0) & 0xFF);
 
     //Reset to previous current position
-    fos.getChannel().position(currentPosition);
+    fos.getChannel().position(dumpEnd);
   }
 
   private void writeClassDumpRecords() throws IOException {
@@ -1112,7 +1112,6 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
               Klass reflectedKlass = java_lang_Class.asKlass(instance);
               if (reflectedKlass != null && !klasses.contains(reflectedKlass)) {
                 klasses.add(reflectedKlass);
-                System.out.println("Lambda class: " + reflectedKlass.getName().asString());
                 writeClassLoadRecord(reflectedKlass);
               }
             } catch (IOException e) {
@@ -1241,6 +1240,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   private static final int EMPTY_FRAME_DEPTH = -1;
 
   private DataOutputStream out;
+  private CountingOutputStream countOut;
   private FileOutputStream fos;
   private Debugger dbg;
   private ObjectHeap objectHeap;
