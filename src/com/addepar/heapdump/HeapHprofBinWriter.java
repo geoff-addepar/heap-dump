@@ -72,6 +72,7 @@ import sun.jvm.hotspot.runtime.VM;
 import sun.jvm.hotspot.types.Type;
 import sun.jvm.hotspot.utilities.AbstractHeapGraphWriter;
 import sun.jvm.hotspot.utilities.Assert;
+import sun.jvm.hotspot.utilities.AssertionFailure;
 
 /*
  * This class writes Java heap in hprof binary format. This format is
@@ -427,7 +428,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
     VM vm = VM.getVM();
     dbg = vm.getDebugger();
-    objectHeap = vm.getObjectHeap();
+    objectHeap = new FastObjectHeap(vm.getTypeDataBase(), vm.getSymbolTable());
     symTbl = vm.getSymbolTable();
     Type klassType = vm.lookupType("Klass");
     klassJavaMirrorField = new OopField(klassType.getOopField("_java_mirror"), 0L);
@@ -473,7 +474,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     writeClassDumpRecords();
 
     // this will write heap data into the buffer stream
-    super.write();
+    write();
 
     // flush buffer stream.
     out.flush();
@@ -494,6 +495,90 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
     // close the file stream
     fos.close();
+  }
+
+  // the function iterates heap and calls Oop type specific writers
+  protected void write() throws IOException {
+    SymbolTable symTbl = VM.getVM().getSymbolTable();
+    javaLangClass = symTbl.probe("java/lang/Class");
+    javaLangString = symTbl.probe("java/lang/String");
+    javaLangThread = symTbl.probe("java/lang/Thread");
+    try {
+      objectHeap.iterate(new DefaultHeapVisitor() {
+        public void prologue(long usedSize) {
+          try {
+            writeHeapHeader();
+          } catch (IOException exp) {
+            throw new RuntimeException(exp);
+          }
+        }
+
+        public boolean doObj(Oop oop) {
+          try {
+            writeHeapRecordPrologue();
+            if (oop instanceof TypeArray) {
+              writePrimitiveArray((TypeArray)oop);
+            } else if (oop instanceof ObjArray) {
+              Klass klass = oop.getKlass();
+              ObjArrayKlass oak = (ObjArrayKlass) klass;
+              Klass bottomType = oak.getBottomKlass();
+              if (bottomType instanceof InstanceKlass ||
+                  bottomType instanceof TypeArrayKlass) {
+                writeObjectArray((ObjArray)oop);
+              } else {
+                writeInternalObject(oop);
+              }
+            } else if (oop instanceof Instance) {
+              Instance instance = (Instance) oop;
+              Klass klass = instance.getKlass();
+              Symbol name = klass.getName();
+              if (name.equals(javaLangString)) {
+                writeString(instance);
+              } else if (name.equals(javaLangClass)) {
+                writeClass(instance);
+              } else if (name.equals(javaLangThread)) {
+                writeThread(instance);
+              } else {
+                klass = klass.getSuper();
+                while (klass != null) {
+                  name = klass.getName();
+                  if (name.equals(javaLangThread)) {
+                    writeThread(instance);
+                    return false;
+                  }
+                  klass = klass.getSuper();
+                }
+                writeInstance(instance);
+              }
+            } else {
+              // not-a-Java-visible oop
+              writeInternalObject(oop);
+            }
+            writeHeapRecordEpilogue();
+          } catch (IOException exp) {
+            throw new RuntimeException(exp);
+          }
+          return false;
+        }
+
+        public void epilogue() {
+          try {
+            writeHeapFooter();
+          } catch (IOException exp) {
+            throw new RuntimeException(exp);
+          }
+        }
+      });
+
+      // write JavaThreads
+      writeJavaThreads();
+
+      // write JNI global handles
+      writeGlobalJNIHandles();
+
+    } catch (RuntimeException re) {
+      handleRuntimeException(re);
+    }
   }
 
   @Override
@@ -858,8 +943,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     out.writeInt(DUMMY_STACK_TRACE_ID);
     writeObjectIDForKlass(klass);
 
-    if (Assert.ASSERTS_ENABLED) {
-      Assert.that(cd != null, "can not get class data for " + klass.getName().asString() + klass.getAddress());
+    if (cd == null) {
+      throw new AssertionFailure("can not get class data for " + klass.getName().asString() + klass.getAddress());
     }
     List fields = cd.fields;
     int size = cd.instSize;
@@ -1027,6 +1112,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
               Klass reflectedKlass = java_lang_Class.asKlass(instance);
               if (reflectedKlass != null && !klasses.contains(reflectedKlass)) {
                 klasses.add(reflectedKlass);
+                System.out.println("Lambda class: " + reflectedKlass.getName().asString());
                 writeClassLoadRecord(reflectedKlass);
               }
             } catch (IOException e) {
