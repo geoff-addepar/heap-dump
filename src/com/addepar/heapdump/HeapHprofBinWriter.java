@@ -71,7 +71,6 @@ import sun.jvm.hotspot.runtime.JavaThread;
 import sun.jvm.hotspot.runtime.VM;
 import sun.jvm.hotspot.types.Type;
 import sun.jvm.hotspot.utilities.AbstractHeapGraphWriter;
-import sun.jvm.hotspot.utilities.Assert;
 import sun.jvm.hotspot.utilities.AssertionFailure;
 
 /*
@@ -503,7 +502,6 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     SymbolTable symTbl = VM.getVM().getSymbolTable();
     javaLangClass = symTbl.probe("java/lang/Class");
     javaLangString = symTbl.probe("java/lang/String");
-    javaLangThread = symTbl.probe("java/lang/Thread");
     try {
       System.out.println("Dumping heap");
       objectHeap.iterate(new DefaultHeapVisitor() {
@@ -538,18 +536,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
                 writeString(instance);
               } else if (name.equals(javaLangClass)) {
                 writeClass(instance);
-              } else if (name.equals(javaLangThread)) {
-                writeThread(instance);
               } else {
-                klass = klass.getSuper();
-                while (klass != null) {
-                  name = klass.getName();
-                  if (name.equals(javaLangThread)) {
-                    writeThread(instance);
-                    return false;
-                  }
-                  klass = klass.getSuper();
-                }
                 writeInstance(instance);
               }
             } else {
