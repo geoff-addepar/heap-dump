@@ -654,7 +654,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     // all other Class objects are covered by writeClassDumpRecords.
     if (reflectedKlass == null) {
       writeInstance(instance);
-    } else if (!classDataCache.containsKey(reflectedKlass) && reflectedKlass instanceof InstanceKlass) {
+    } else if (!classDataCache.containsKey(reflectedKlass.getAddress()) && reflectedKlass instanceof InstanceKlass) {
       writeClassDumpRecord((InstanceKlass) reflectedKlass);
     }
   }
@@ -680,7 +680,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
       writeObjectID(null);
       List fields = getInstanceFields(ik);
       int instSize = getSizeForFields(fields);
-      classDataCache.put(ik, new ClassData(instSize, fields));
+      classDataCache.put(ik.getAddress(), new ClassData(instSize, fields));
       out.writeInt(instSize);
 
       // For now, ignore constant pool - HAT ignores too!
@@ -910,7 +910,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
   protected void writeInstance(Instance instance) throws IOException {
     Klass klass = instance.getKlass();
-    ClassData cd = (ClassData) classDataCache.get(klass);
+    ClassData cd = (ClassData) classDataCache.get(klass.getAddress());
     if (cd == null) {
       // The class is not present in the system dictionary, probably Lambda.
       // Add it to cache here
@@ -919,7 +919,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
         List fields = getInstanceFields(ik);
         int instSize = getSizeForFields(fields);
         cd = new ClassData(instSize, fields);
-        classDataCache.put(ik, cd);
+        classDataCache.put(ik.getAddress(), cd);
 
         writeClassDumpRecord(ik);
       }
