@@ -34,6 +34,8 @@ public class FastObjectHeap extends ObjectHeap {
   private final MetadataField oopKlass;
   private final NarrowKlassField oopCompressedKlass;
 
+  private final long oopKlassOffset;
+
   private final Symbol javaLangClass;
 
 
@@ -50,6 +52,9 @@ public class FastObjectHeap extends ObjectHeap {
     Type oopType = db.lookupType("oopDesc");
     oopKlass = new MetadataField(oopType.getAddressField("_metadata._klass"), 0L);
     oopCompressedKlass = new NarrowKlassField(oopType.getAddressField("_metadata._compressed_klass"), 0L);
+
+    Type jlc = db.lookupType("java_lang_Class");
+    oopKlassOffset = jlc.getCIntegerField("_klass_offset").getValue();
 
     javaLangClass = symTbl.probe("java/lang/Class");
   }
@@ -88,6 +93,14 @@ public class FastObjectHeap extends ObjectHeap {
         return new FastInstance(handle, this, new FastInstanceKlass(klassAddress));
       }
     }
+  }
+
+  public Klass getKlassForClass(Oop instanceOfJavaLangClass) {
+    Address address = instanceOfJavaLangClass.getHandle().getAddressAt(oopKlassOffset);
+    if (address == null) {
+      return null;
+    }
+    return getKlassAtAddress(address);
   }
 
   public Klass getKlassAtAddress(Address klassAddress) {

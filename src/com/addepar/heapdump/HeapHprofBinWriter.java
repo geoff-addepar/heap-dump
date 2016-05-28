@@ -56,7 +56,6 @@ import sun.jvm.hotspot.oops.LongField;
 import sun.jvm.hotspot.oops.NarrowOopField;
 import sun.jvm.hotspot.oops.ObjArray;
 import sun.jvm.hotspot.oops.ObjArrayKlass;
-import sun.jvm.hotspot.oops.ObjectHeap;
 import sun.jvm.hotspot.oops.Oop;
 import sun.jvm.hotspot.oops.OopField;
 import sun.jvm.hotspot.oops.ShortField;
@@ -649,7 +648,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   protected void writeClass(Instance instance) throws IOException {
-    Klass reflectedKlass = java_lang_Class.asKlass(instance);
+    Klass reflectedKlass = objectHeap.getKlassForClass(instance);
     // dump instance record only for primitive type Class objects.
     // all other Class objects are covered by writeClassDumpRecords.
     if (reflectedKlass == null) {
