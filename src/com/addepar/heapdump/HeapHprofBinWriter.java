@@ -1230,7 +1230,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   private CountingOutputStream countOut;
   private FileOutputStream fos;
   private Debugger dbg;
-  private ObjectHeap objectHeap;
+  private FastObjectHeap objectHeap;
   private SymbolTable symTbl;
   private OopField klassJavaMirrorField;
 
