@@ -24,23 +24,12 @@
 
 package com.addepar.heapdump;
 
-import java.io.BufferedOutputStream;
-import java.io.DataOutputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.Debugger;
 import sun.jvm.hotspot.debugger.OopHandle;
 import sun.jvm.hotspot.memory.SymbolTable;
 import sun.jvm.hotspot.memory.SystemDictionary;
+import sun.jvm.hotspot.oops.ArrayKlass;
 import sun.jvm.hotspot.oops.BooleanField;
 import sun.jvm.hotspot.oops.ByteField;
 import sun.jvm.hotspot.oops.CharField;
@@ -62,15 +51,27 @@ import sun.jvm.hotspot.oops.ShortField;
 import sun.jvm.hotspot.oops.Symbol;
 import sun.jvm.hotspot.oops.TypeArray;
 import sun.jvm.hotspot.oops.TypeArrayKlass;
-import sun.jvm.hotspot.oops.java_lang_Class;
 import sun.jvm.hotspot.runtime.AddressVisitor;
 import sun.jvm.hotspot.runtime.BasicType;
 import sun.jvm.hotspot.runtime.JNIHandleBlock;
 import sun.jvm.hotspot.runtime.JavaThread;
 import sun.jvm.hotspot.runtime.VM;
+import sun.jvm.hotspot.types.AddressField;
 import sun.jvm.hotspot.types.Type;
 import sun.jvm.hotspot.utilities.AbstractHeapGraphWriter;
 import sun.jvm.hotspot.utilities.AssertionFailure;
+
+import java.io.BufferedOutputStream;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /*
  * This class writes Java heap in hprof binary format. This format is
@@ -427,10 +428,24 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
 
     VM vm = VM.getVM();
     dbg = vm.getDebugger();
+
     objectHeap = new FastObjectHeap(vm.getTypeDataBase(), vm.getSymbolTable());
+    try {
+      java.lang.reflect.Field field = VM.class.getDeclaredField("heap");
+      field.setAccessible(true);
+      field.set(vm, objectHeap);
+    } catch (NoSuchFieldException e) {
+      throw new RuntimeException(e);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+
     symTbl = vm.getSymbolTable();
     Type klassType = vm.lookupType("Klass");
     klassJavaMirrorField = new OopField(klassType.getOopField("_java_mirror"), 0L);
+    klassSuperField = klassType.getAddressField("_super");
+
+    objectKlass = SystemDictionary.getObjectKlass();
 
     OBJ_ID_SIZE = (int) vm.getOopSize();
 
@@ -662,7 +677,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
     out.writeByte((byte)HPROF_GC_CLASS_DUMP);
     writeObjectIDForKlass(k);
     out.writeInt(DUMMY_STACK_TRACE_ID);
-    Klass superKlass = k.getJavaSuper();
+
+    Klass superKlass = getJavaSuper(k);
     if (superKlass != null) {
       writeObjectIDForKlass(superKlass);
     } else {
@@ -1073,7 +1089,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
       sysDict.allClassesDo(new SystemDictionary.ClassVisitor() {
         public void visit(Klass k) {
           try {
-            klasses.add(k);
+            klasses.add(k.getAddress());
             writeClassLoadRecord(k);
           } catch (IOException exp) {
             throw new RuntimeException(exp);
@@ -1095,9 +1111,9 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
           Symbol name = klass.getName();
           if (name.equals(javaLangClass)) {
             try {
-              Klass reflectedKlass = java_lang_Class.asKlass(instance);
-              if (reflectedKlass != null && !klasses.contains(reflectedKlass)) {
-                klasses.add(reflectedKlass);
+              Klass reflectedKlass = objectHeap.getKlassForClass(instance);
+              if (reflectedKlass != null && !klasses.contains(reflectedKlass.getAddress())) {
+                klasses.add(reflectedKlass.getAddress());
                 writeClassLoadRecord(reflectedKlass);
               }
             } catch (IOException e) {
@@ -1168,7 +1184,7 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   }
 
   // get all declared as well as inherited (directly/indirectly) fields
-  private static List/*<Field>*/ getInstanceFields(InstanceKlass ik) {
+  private List/*<Field>*/ getInstanceFields(InstanceKlass ik) {
     InstanceKlass klass = ik;
     List res = new ArrayList();
     while (klass != null) {
@@ -1179,9 +1195,27 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
           res.add(f);
         }
       }
-      klass = (InstanceKlass) klass.getSuper();
+      klass = (InstanceKlass) getSuper(klass);
     }
     return res;
+  }
+
+  private Klass getSuper(InstanceKlass klass) {
+    Address superAddress = klassSuperField.getValue(klass.getAddress());
+    if (superAddress == null) {
+      return null;
+    }
+    return objectHeap.getKlassAtAddress(superAddress);
+  }
+
+  private Klass getJavaSuper(Klass klass) {
+    if (klass instanceof InstanceKlass) {
+      return getSuper((InstanceKlass) klass);
+    } else if (klass instanceof ArrayKlass) {
+      return objectKlass;
+    } else {
+      return null;
+    }
   }
 
   // get size in bytes (in stream) required for given fields.  Note
@@ -1232,6 +1266,8 @@ public class HeapHprofBinWriter extends AbstractHeapGraphWriter {
   private FastObjectHeap objectHeap;
   private SymbolTable symTbl;
   private OopField klassJavaMirrorField;
+  private AddressField klassSuperField;
+  private Klass objectKlass;
 
   // oopSize of the debuggee
   private int OBJ_ID_SIZE;
