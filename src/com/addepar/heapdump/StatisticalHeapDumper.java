@@ -1,5 +1,9 @@
 package com.addepar.heapdump;
 
+import com.addepar.heapdump.debugger.SelfDebugger;
+
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -10,6 +14,8 @@ import java.util.Random;
 
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.JVMDebugger;
+import sun.jvm.hotspot.debugger.MachineDescription;
+import sun.jvm.hotspot.debugger.MachineDescriptionAMD64;
 import sun.jvm.hotspot.debugger.OopHandle;
 import sun.jvm.hotspot.gc_interface.CollectedHeap;
 import sun.jvm.hotspot.memory.CompactibleFreeListSpace;
@@ -21,13 +27,15 @@ import sun.jvm.hotspot.oops.Klass;
 import sun.jvm.hotspot.oops.Oop;
 import sun.jvm.hotspot.runtime.VM;
 import sun.jvm.hotspot.tools.Tool;
+import sun.jvm.hotspot.utilities.PlatformInfo;
 
 /**
  * @author Geoff Lywood (geoff@addepar.com)
  */
 public class StatisticalHeapDumper extends Tool {
-  private static final int SAMPLES = 10000;
+  private static final int SAMPLES = 100;
 
+  private final PrintWriter out;
   private JVMDebugger dbg;
   private FastObjectHeap objectHeap;
   private SymbolTable symTbl;
@@ -35,6 +43,16 @@ public class StatisticalHeapDumper extends Tool {
   private int heapWordSize;
 
   private int misses;
+
+  private StatisticalHeapDumper(PrintWriter out) {
+    super();
+    this.out = out;
+  }
+
+  private StatisticalHeapDumper(PrintWriter out, JVMDebugger dbg) {
+    super(dbg);
+    this.out = out;
+  }
 
   void init() {
     random = new Random();
@@ -156,14 +174,14 @@ public class StatisticalHeapDumper extends Tool {
   }
 
   private void write(Graph graph, long totalHeapSize, int totalHits) {
-    System.out.println();
-    System.out.println();
-    System.out.println("Live heap:     " + totalHeapSize);
-    System.out.println("Total samples: " + SAMPLES);
-    System.out.println("Total hits:    " + totalHits);
-    System.out.println();
-    System.out.println("Estimated Number | Estimated Total Size | Class");
-    System.out.println("-----------------------------------------------");
+    out.println();
+    out.println();
+    out.println("Live heap:     " + totalHeapSize);
+    out.println("Total samples: " + SAMPLES);
+    out.println("Total hits:    " + totalHits);
+    out.println();
+    out.println("Estimated Number | Estimated Total Size | Class");
+    out.println("-----------------------------------------------");
     List<Node> sortedNodes = new ArrayList<Node>(graph.nodes.values());
     Collections.sort(sortedNodes, new Comparator<Node>() {
       @Override
@@ -180,13 +198,33 @@ public class StatisticalHeapDumper extends Tool {
       double sizeOfObject = (double) node.size / (double) node.hits;
       double estimatedSize = ((double) node.hits * (double) totalHeapSize) / (double) SAMPLES;
       double estimatedNumber = estimatedSize / sizeOfObject;
-      System.out.format("%16.0f | %20.0f | %s\n", estimatedNumber, estimatedSize, className);
+      out.format("%16.0f | %20.0f | %s\n", estimatedNumber, estimatedSize, className);
+      out.flush();
     }
   }
 
-  public static void main(String args[]) {
-    StatisticalHeapDumper dumper = new StatisticalHeapDumper();
+  public static void main(String args[]) throws IOException {
+    @SuppressWarnings("UseOfSystemOutOrSystemErr")
+    PrintWriter out = new PrintWriter(System.out);
+
+    StatisticalHeapDumper dumper = new StatisticalHeapDumper(out);
+
+    StatisticalHeapDumper.selfDump(new PrintWriter(System.out));
+
     dumper.execute(args);
+  }
+
+  public static void selfDump(PrintWriter out) throws IOException {
+    MachineDescription machDesc;
+    String cpu = PlatformInfo.getCPU();
+    if ("amd64".equals(cpu)) {
+      machDesc = new MachineDescriptionAMD64();
+    } else {
+      throw new RuntimeException("Unsupported CPU");
+    }
+    SelfDebugger dbg = new SelfDebugger(machDesc);
+    StatisticalHeapDumper dumper = new StatisticalHeapDumper(out, dbg);
+    dumper.start();
   }
 
   private class Node {
