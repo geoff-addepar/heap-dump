@@ -5,11 +5,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import com.sun.jna.Pointer;
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.DebuggerBase;
 import sun.jvm.hotspot.debugger.DebuggerException;
@@ -35,7 +32,7 @@ import sun.jvm.hotspot.utilities.PlatformInfo;
  */
 public class SelfDebugger extends DebuggerBase implements JVMDebugger {
 
-  private Map<String, Pointer> dlSymHandles = new HashMap<>();
+  private ElfSymbolLookup elfSymbolLookup;
   private FileChannel selfMem;
 
   public SelfDebugger(MachineDescription machDesc) throws IOException {
@@ -49,6 +46,7 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
     };
     this.initCache(4096L, (long)this.parseCacheNumPagesProperty(4096));
     this.selfMem = FileChannel.open(Paths.get("/proc/self/mem"), StandardOpenOption.READ);
+    this.elfSymbolLookup = new ElfSymbolLookup();
   }
 
   @Override
@@ -92,9 +90,6 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
       selfMem.close();
     } catch (IOException e) {
       throw new RuntimeException(e);
-    }
-    for (Pointer handle : dlSymHandles.values()) {
-      DynamicLoader.INSTANCE.dlclose(handle);
     }
     return true;
   }
@@ -168,19 +163,8 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
   @Override
   public Address lookup(String objectName, String symbol) {
     // It's safe to ignore objectName. See libproc_impl.c and lookup_symbol()
-    Pointer handle = dlSymHandles.get(objectName);
-    if (handle == null) {
-      handle = DynamicLoader.INSTANCE.dlopen(objectName, DynamicLoader.RTLD_LAZY | DynamicLoader.RTLD_NOLOAD);
-      if (handle == null) {
-        throw new RuntimeException("Failed to load object " + objectName);
-      }
-      dlSymHandles.put(objectName, handle);
-    }
-    Pointer symPtr = DynamicLoader.INSTANCE.dlsym(handle, symbol);
-    if (symPtr == null) {
-      return null;
-    }
-    return new SelfAddress(this, Pointer.nativeValue(symPtr));
+    Long value = elfSymbolLookup.lookup(symbol);
+    return value == null || value == 0 ? null : new SelfAddress(this, value);
   }
 
   @Override
