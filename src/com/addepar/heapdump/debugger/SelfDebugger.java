@@ -34,6 +34,7 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
 
   private ElfSymbolLookup elfSymbolLookup;
   private FileChannel selfMem;
+  private boolean useGcc32Abi;
 
   public SelfDebugger(MachineDescription machDesc) throws IOException {
     this.machDesc = machDesc;
@@ -47,6 +48,12 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
     this.initCache(4096L, (long)this.parseCacheNumPagesProperty(4096));
     this.selfMem = FileChannel.open(Paths.get("/proc/self/mem"), StandardOpenOption.READ);
     this.elfSymbolLookup = new ElfSymbolLookup();
+
+    findAbiVersion();
+  }
+
+  private void findAbiVersion() throws DebuggerException {
+    useGcc32Abi = elfSymbolLookup.lookup("__vt_10JavaThread") == null;
   }
 
   @Override
@@ -164,7 +171,13 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
   public Address lookup(String objectName, String symbol) {
     // It's safe to ignore objectName. See libproc_impl.c and lookup_symbol()
     Long value = elfSymbolLookup.lookup(symbol);
-    return value == null || value == 0 ? null : new SelfAddress(this, value);
+    if (value == null || value == 0) {
+      return null;
+    }
+    if (useGcc32Abi) {
+      value += 2 * machDesc.getAddressSize();
+    }
+    return new SelfAddress(this, value);
   }
 
   @Override
