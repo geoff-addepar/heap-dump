@@ -1,6 +1,9 @@
 # heap-dump
 A working version of jmap -F
 
+# Before Using this Tool
+Try running `jmap` without the `-F` option again. You can also increase the time that it will wait to connect, by specifying the option `-J-Dsun.tools.attach.attachTimeout=<milliseconds>` with a longer timeout. The default is only 5 seconds, and sometimes it takes longer than that for the VM to respond.
+
 # Rationale
 The current version of `jmap -F` (or `jmap -dump:format=b,file=dump.hprof /path/to/java corefile`) doesn't handle lambdas correctly, and generates a corrupted heap dump file. If you try to load it with `jhat`, you get errors like this:
 ```
