@@ -174,7 +174,7 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
     if (value == null || value == 0) {
       return null;
     }
-    if (useGcc32Abi) {
+    if (useGcc32Abi && symbol.startsWith("_ZTV")) {
       value += 2 * machDesc.getAddressSize();
     }
     return new SelfAddress(this, value);
