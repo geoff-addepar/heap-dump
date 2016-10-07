@@ -23,6 +23,9 @@ java.lang.NullPointerException
 	at org.eclipse.mat.hprof.Pass2Parser.read(Pass2Parser.java:89)
 ```
 
+# Download
+You can download the current version from the [releases](https://github.com/geoff-addepar/heap-dump/releases) page.
+
 # Usage
 First you need a core file. You can get that using:
 ```
