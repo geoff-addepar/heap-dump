@@ -1,12 +1,12 @@
 <component name="libraryTable">
   <library name="tools and jdi">
     <CLASSES>
-      <root url="jar:///usr/lib/jvm/java-8-oracle/lib/tools.jar!/" />
-      <root url="jar:///usr/lib/jvm/java-8-oracle/lib/sa-jdi.jar!/" />
+      <root url="jar:///opt/java/jdk1.8.0_112/lib/sa-jdi.jar!/" />
+      <root url="jar:///opt/java/jdk1.8.0_112/lib/tools.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES>
-      <root url="jar:///usr/lib/jvm/java-8-oracle/lib/tools.jar!/" />
+      <root url="jar:///opt/java/jdk1.8.0_112/lib/tools.jar!/" />
     </SOURCES>
   </library>
 </component>
