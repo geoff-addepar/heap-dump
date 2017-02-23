@@ -15,7 +15,7 @@ import com.sun.jna.Pointer;
  *
  * @author Geoff Lywood (geoff@addepar.com)
  */
-class ElfSymbolLookup {
+public class ElfSymbolLookup {
   private Map<String, Long> symbols = new HashMap<>();
 
   public ElfSymbolLookup() {
