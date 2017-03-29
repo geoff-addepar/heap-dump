@@ -1,6 +1,5 @@
 package com.addepar.heapdump.inspect;
 
-import com.addepar.heapdump.debugger.ElfSymbolLookup;
 import com.addepar.heapdump.inspect.struct.CollectedHeap;
 import com.addepar.heapdump.inspect.struct.Klass;
 import com.addepar.heapdump.inspect.struct.Universe;
@@ -42,16 +41,16 @@ import static org.objectweb.asm.Opcodes.RETURN;
 public class HotspotStructs {
 
   private final AddressSpace space;
-  private final ElfSymbolLookup symbolLookup;
-  private final Set<Class<?>> types;
+  private final HotspotTypes types;
+  private final Set<Class<?>> structInterfaces;
   private final Map<Class<?>, Constructor<?>> constructors;
   Map<FieldDescriptor, FieldInfo> fieldMap;
 
-  public HotspotStructs(AddressSpace space, ElfSymbolLookup symbolLookup) {
+  public HotspotStructs(AddressSpace space, HotspotTypes types) {
     this.space = space;
-    this.symbolLookup = symbolLookup;
+    this.types = types;
     this.fieldMap = generateFieldMap();
-    this.types = new HashSet<>(Arrays.asList(
+    this.structInterfaces = new HashSet<>(Arrays.asList(
         CollectedHeap.class,
         Klass.class,
         Universe.class
@@ -79,7 +78,7 @@ public class HotspotStructs {
   private Map<Class<?>, Constructor<?>> generateImplementations() {
     Map<Class<?>, Constructor<?>> map = new HashMap<>();
     AsmClassLoader loader = new AsmClassLoader();
-    for (Class<?> iface : types) {
+    for (Class<?> iface : structInterfaces) {
       map.put(iface, generateImplementation(iface, loader));
     }
     return map;
@@ -118,22 +117,37 @@ public class HotspotStructs {
     mv.visitEnd();
 
     for (Method method : iface.getMethods()) {
-      FieldInfo fieldInfo = getFieldInfo(iface.getSimpleName(), method);
+      String fieldType = method.getAnnotation(FieldType.class).value();
+      FieldDescriptor descriptor = new FieldDescriptor(iface.getSimpleName(), method.getName(), fieldType);
+
+      FieldInfo fieldInfo = fieldMap.get(descriptor);
+      if (fieldInfo == null) {
+        throw new RuntimeException("Could not find field " + descriptor + " in JVM's gHotSpotVMStructs");
+      }
       Class<?> returnType = method.getReturnType();
 
       if (returnType == byte.class) {
+        checkTypeWidth(fieldType, 1);
         generatePrimitiveMethod(cw, method, fieldInfo, "B", "getByte", implName);
       } else if (returnType == boolean.class) {
+        checkTypeWidth(fieldType, 1);
         generatePrimitiveMethod(cw, method, fieldInfo, "Z", "getBoolean", implName);
       } else if (returnType == char.class) {
+        checkTypeWidth(fieldType, 2);
         generatePrimitiveMethod(cw, method, fieldInfo, "C", "getChar", implName);
       } else if (returnType == int.class) {
+        checkTypeWidth(fieldType, 4);
         generatePrimitiveMethod(cw, method, fieldInfo, "I", "getInt", implName);
       } else if (returnType == long.class) {
+        checkTypeWidth(fieldType, 8);
         generatePrimitiveMethod(cw, method, fieldInfo, "J", "getLong", implName);
       } else if (returnType == short.class) {
+        checkTypeWidth(fieldType, 2);
         generatePrimitiveMethod(cw, method, fieldInfo, "S", "getShort", implName);
-      } else if (types.contains(returnType)) {
+      } else if (structInterfaces.contains(returnType)) {
+        if (!fieldType.endsWith("*")) {
+          checkTypeWidth(fieldType, space.getPointerSize());
+        }
         generateWrapperMethod(cw, method, fieldInfo, returnType.getName().replace('.', '/'), implName);
       } else {
         throw new IllegalStateException("Unrecognized return type " + returnType + " for method " + method);
@@ -148,6 +162,16 @@ public class HotspotStructs {
       return cl.getConstructor(AddressSpace.class, long.class);
     } catch (NoSuchMethodException e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  private void checkTypeWidth(String typeName, int size) {
+    HotspotTypes.TypeDescriptor typeDescriptor = types.getType(typeName);
+    if (typeDescriptor == null) {
+      throw new RuntimeException("Type " + typeName + " was not declared");
+    }
+    if (typeDescriptor.getSize() != size) {
+      throw new RuntimeException("Type width of " + typeName + " does not match expected size of " + size);
     }
   }
 
@@ -174,12 +198,15 @@ public class HotspotStructs {
     mv.visitEnd();
   }
 
+  /**
+   * Generate a method that returns another struct
+   */
   private void generateWrapperMethod(ClassWriter cw, Method method, FieldInfo fieldInfo, String fieldType, String impl) {
     MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, method.getName(), "()L" + fieldType + ";", null, null);
     String fieldImpl = fieldType + "Impl";
 
     FieldType annotation = method.getAnnotation(FieldType.class);
-    boolean embedded = annotation.embedded();
+    boolean embedded = !annotation.value().endsWith("*");
 
     // non-embedded: return new KlassImpl(addressSpace, addressSpace.getPointer([address+]offset))
     // embedded: return new KlassImpl(addressSpace, [address+]offset)
@@ -209,14 +236,14 @@ public class HotspotStructs {
   }
 
   private Map<FieldDescriptor, FieldInfo> generateFieldMap() {
-    long vmStructs = space.getPointer(symbolLookup.lookup("gHotSpotVMStructs"));
-    long typeNameOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryTypeNameOffset"));
-    long fieldNameOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryFieldNameOffset"));
-    long typeStringOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryTypeStringOffset"));
-    long isStaticOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryIsStaticOffset"));
-    long offsetOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryOffsetOffset"));
-    long addressOffset = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryAddressOffset"));
-    long stride = space.getLong(symbolLookup.lookup("gHotSpotVMStructEntryArrayStride"));
+    long vmStructs = space.getPointer(space.lookupSymbol("gHotSpotVMStructs"));
+    long typeNameOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryTypeNameOffset"));
+    long fieldNameOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryFieldNameOffset"));
+    long typeStringOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryTypeStringOffset"));
+    long isStaticOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryIsStaticOffset"));
+    long offsetOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryOffsetOffset"));
+    long addressOffset = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryAddressOffset"));
+    long stride = space.getLong(space.lookupSymbol("gHotSpotVMStructEntryArrayStride"));
 
     long current = vmStructs;
 
@@ -238,18 +265,6 @@ public class HotspotStructs {
     }
 
     return fieldMap;
-  }
-
-  private FieldInfo getFieldInfo(String type, Method method) {
-    FieldType fieldType = method.getAnnotation(FieldType.class);
-    FieldDescriptor descriptor = new FieldDescriptor(type, method.getName(),
-        fieldType.value());
-
-    FieldInfo info = fieldMap.get(descriptor);
-    if (info == null) {
-      throw new RuntimeException("Could not find field " + descriptor + " in JVM's gHotSpotVMStructs");
-    }
-    return info;
   }
 
   private static final class FieldDescriptor {

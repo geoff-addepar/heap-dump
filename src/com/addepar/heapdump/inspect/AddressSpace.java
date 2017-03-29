@@ -1,6 +1,10 @@
 package com.addepar.heapdump.inspect;
 
+import com.addepar.heapdump.inspect.inferior.Inferior;
+
 import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class AddressSpace {
   private static final int PAGE_SIZE = 0x10000;
@@ -97,6 +101,25 @@ public class AddressSpace {
     if ((address & (alignment - 1)) != 0) {
       throw new IllegalArgumentException("Address " + Long.toHexString(address)
           + " is not aligned on a multiple of " + alignment);
+    }
+  }
+
+  public long lookupSymbol(String symbolName) {
+    return inferior.lookupSymbol(symbolName);
+  }
+
+  public int getPointerSize() {
+    return inferior.getPointerSize();
+  }
+
+  @SuppressWarnings("serial")
+  private static class PageCache extends LinkedHashMap<Long, ByteBuffer> {
+
+    private static final int MAX_ENTRIES = 1000;
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<Long, ByteBuffer> eldest) {
+      return size() > MAX_ENTRIES;
     }
   }
 }

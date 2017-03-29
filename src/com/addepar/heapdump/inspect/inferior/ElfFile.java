@@ -1,4 +1,4 @@
-package com.addepar.heapdump.debugger;
+package com.addepar.heapdump.inspect.inferior;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

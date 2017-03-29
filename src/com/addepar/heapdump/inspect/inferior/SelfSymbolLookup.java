@@ -1,7 +1,7 @@
-package com.addepar.heapdump.debugger;
+package com.addepar.heapdump.inspect.inferior;
 
-import com.addepar.heapdump.debugger.CLibrary.dl_phdr_info;
-import com.addepar.heapdump.debugger.CLibrary.size_t;
+import com.addepar.heapdump.inspect.inferior.CLibrary.dl_phdr_info;
+import com.addepar.heapdump.inspect.inferior.CLibrary.size_t;
 
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Paths;
@@ -15,10 +15,10 @@ import com.sun.jna.Pointer;
  *
  * @author Geoff Lywood (geoff@addepar.com)
  */
-public class ElfSymbolLookup {
+public class SelfSymbolLookup {
   private Map<String, Long> symbols = new HashMap<>();
 
-  public ElfSymbolLookup() {
+  public SelfSymbolLookup() {
     CLibrary.INSTANCE.dl_iterate_phdr(this::doProgramHeader, null);
   }
 
@@ -43,7 +43,11 @@ public class ElfSymbolLookup {
     }
   }
 
-  public Long lookup(String symbolName) {
-    return symbols.get(symbolName);
+  public long lookup(String symbolName) {
+    Long address = symbols.get(symbolName);
+    if (address == null) {
+      throw new NoSuchSymbolException(symbolName);
+    }
+    return address;
   }
 }

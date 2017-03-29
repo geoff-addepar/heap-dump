@@ -7,6 +7,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 
+import com.addepar.heapdump.inspect.inferior.NoSuchSymbolException;
+import com.addepar.heapdump.inspect.inferior.SelfSymbolLookup;
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.DebuggerBase;
 import sun.jvm.hotspot.debugger.DebuggerException;
@@ -32,7 +34,7 @@ import sun.jvm.hotspot.utilities.PlatformInfo;
  */
 public class SelfDebugger extends DebuggerBase implements JVMDebugger {
 
-  private ElfSymbolLookup elfSymbolLookup;
+  private SelfSymbolLookup selfSymbolLookup;
   private FileChannel selfMem;
   private boolean useGcc32Abi;
 
@@ -47,13 +49,18 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
     };
     this.initCache(4096L, (long)this.parseCacheNumPagesProperty(4096));
     this.selfMem = FileChannel.open(Paths.get("/proc/self/mem"), StandardOpenOption.READ);
-    this.elfSymbolLookup = new ElfSymbolLookup();
+    this.selfSymbolLookup = new SelfSymbolLookup();
 
     findAbiVersion();
   }
 
   private void findAbiVersion() throws DebuggerException {
-    useGcc32Abi = elfSymbolLookup.lookup("__vt_10JavaThread") == null;
+    try {
+      selfSymbolLookup.lookup("__vt_10JavaThread");
+      useGcc32Abi = false;
+    } catch (NoSuchSymbolException e) {
+      useGcc32Abi = true;
+    }
   }
 
   @Override
@@ -170,8 +177,8 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
   @Override
   public Address lookup(String objectName, String symbol) {
     // It's safe to ignore objectName. See libproc_impl.c and lookup_symbol()
-    Long value = elfSymbolLookup.lookup(symbol);
-    if (value == null || value == 0) {
+    long value = selfSymbolLookup.lookup(symbol);
+    if (value == 0) {
       return null;
     }
     if (useGcc32Abi && symbol.startsWith("_ZTV")) {

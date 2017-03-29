@@ -1,4 +1,4 @@
-package com.addepar.heapdump.debugger;
+package com.addepar.heapdump.inspect.inferior;
 
 import java.util.Arrays;
 import java.util.List;
