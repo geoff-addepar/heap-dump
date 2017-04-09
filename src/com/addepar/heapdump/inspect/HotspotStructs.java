@@ -116,7 +116,7 @@ public class HotspotStructs {
 
   private Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> generateImplementations() {
     Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> map = new HashMap<>();
-    AsmClassLoader loader = new AsmClassLoader();
+    AsmClassLoader loader = new AsmClassLoader(this);
     for (Class<? extends HotspotStruct> iface : structInterfaces) {
       map.put(iface, generateImplementation(iface, loader));
     }
@@ -409,9 +409,19 @@ public class HotspotStructs {
     }
   }
 
-  private static class AsmClassLoader extends ClassLoader {
+  public static class AsmClassLoader extends ClassLoader {
+    private final HotspotStructs hotspotStructs;
+
+    public AsmClassLoader(HotspotStructs hotspotStructs) {
+      this.hotspotStructs = hotspotStructs;
+    }
+
     Class<?> defineClass(String name, byte[] classBytes) {
       return super.defineClass(name, classBytes, 0, classBytes.length);
+    }
+
+    public HotspotStructs getHotspotStructs() {
+      return hotspotStructs;
     }
   }
 }
