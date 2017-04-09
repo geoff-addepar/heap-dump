@@ -20,4 +20,9 @@ public class AddressRange {
   public long getEnd() {
     return end;
   }
+
+  @Override
+  public String toString() {
+    return Long.toHexString(start) + "-" + Long.toHexString(end);
+  }
 }

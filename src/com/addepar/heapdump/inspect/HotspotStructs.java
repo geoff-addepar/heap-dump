@@ -177,7 +177,7 @@ public class HotspotStructs {
       }
 
       for (Method method : currentIface.getDeclaredMethods()) {
-        if (method.getName().equals("getAddress")) {
+        if (method.isDefault()) {
           continue;
         }
 

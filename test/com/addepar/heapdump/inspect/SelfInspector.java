@@ -43,5 +43,8 @@ public class SelfInspector {
         + (universe._collectedHeap().isInstanceOf(ParallelScavengeHeap.class) ? "yes" : "no"));
 
     System.out.println("The fields of ParallelScavengeHeap are " + hotspotStructs.getFields("ParallelScavengeHeap"));
+
+    HotspotHeap heap = new HotspotHeap(new Hotspot(inferior));
+    System.out.println("Live ranges are: " + heap.collectLiveRegions());
   }
 }
