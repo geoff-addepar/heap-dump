@@ -108,6 +108,10 @@ public class AddressSpace {
     return inferior.lookupSymbol(symbolName);
   }
 
+  public long lookupVtable(String typeName) {
+    return inferior.lookupVtable(typeName);
+  }
+
   public int getPointerSize() {
     return inferior.getPointerSize();
   }

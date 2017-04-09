@@ -9,5 +9,7 @@ public interface Inferior {
 
   long lookupSymbol(String symbolName);
 
+  long lookupVtable(String typeName);
+
   void detach();
 }

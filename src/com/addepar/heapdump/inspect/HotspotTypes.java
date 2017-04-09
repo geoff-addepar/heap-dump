@@ -1,5 +1,7 @@
 package com.addepar.heapdump.inspect;
 
+import com.addepar.heapdump.inspect.inferior.NoSuchSymbolException;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,6 +12,7 @@ public class HotspotTypes {
 
   private final AddressSpace space;
   private final Map<String, TypeDescriptor> typeMap = new HashMap<>();
+  private final Map<Long, TypeDescriptor> vtableMap = new HashMap<>();
 
   public HotspotTypes(AddressSpace space) {
     this.space = space;
@@ -40,10 +43,27 @@ public class HotspotTypes {
       boolean isUnsigned = space.getInt(current + isUnsignedOffset) != 0;
       long size = space.getLong(current + sizeOffset);
 
+      boolean isDynamic;
+      long vtableAddress = 0;
+      try {
+        vtableAddress = space.lookupVtable(typeName);
+        isDynamic = true;
+      } catch (NoSuchSymbolException e) {
+        // ignore; there are a lot of types without vtables
+        isDynamic = false;
+      }
+
       TypeDescriptor descriptor =
-          new TypeDescriptor(typeName, superclassName, isOopType, isIntegerType, isUnsigned, size);
+          new TypeDescriptor(typeName, superclassName, isOopType, isIntegerType, isUnsigned, size, isDynamic);
       typeMap.put(typeName, descriptor);
+      if (isDynamic) {
+        vtableMap.put(vtableAddress, descriptor);
+      }
       current += stride;
+    }
+
+    for (TypeDescriptor type : typeMap.values()) {
+      type.superclass = getType(type.superclassName);
     }
   }
 
@@ -51,34 +71,58 @@ public class HotspotTypes {
     return typeMap.get(typeName);
   }
 
+  public TypeDescriptor getDynamicType(long address) {
+    long vtable = space.getPointer(address);
+    return vtableMap.get(vtable);
+  }
+
   public static class TypeDescriptor {
     private final String typeName;
-    private final String superclass;
+    private final String superclassName;
     private final boolean isOopType;
     private final boolean isIntegerType;
     private final boolean isUnsigned;
     private final long size;
 
-    public TypeDescriptor(String typeName, String superclass, boolean isOopType, boolean isIntegerType,
-                          boolean isUnsigned, long size) {
+    // has a vtable?
+    private final boolean isDynamic;
+
+    private TypeDescriptor superclass;
+
+    public TypeDescriptor(String typeName, String superclassName, boolean isOopType, boolean isIntegerType,
+                          boolean isUnsigned, long size, boolean isDynamic) {
       this.typeName = typeName;
-      this.superclass = superclass;
+      this.superclassName = superclassName;
       this.isOopType = isOopType;
       this.isIntegerType = isIntegerType;
       this.isUnsigned = isUnsigned;
       this.size = size;
+      this.isDynamic = isDynamic;
     }
 
     public String getTypeName() {
       return typeName;
     }
 
-    public String getSuperclass() {
-      return superclass;
+    public String getSuperclassName() {
+      return superclassName;
     }
 
     public long getSize() {
       return size;
+    }
+
+    public boolean isDynamic() {
+      return isDynamic;
+    }
+
+    public boolean isSubclassOf(TypeDescriptor other) {
+      return this == other || (superclass != null && superclass.isSubclassOf(other));
+    }
+
+    @Override
+    public String toString() {
+      return typeName;
     }
   }
 }

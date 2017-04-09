@@ -27,4 +27,20 @@ public class Hotspot {
   public HotspotHeap getHeap() {
     return new HotspotHeap(this);
   }
+
+  public HotspotConstants getConstants() {
+    return constants;
+  }
+
+  public HotspotStructs getStructs() {
+    return structs;
+  }
+
+  public HotspotTypes getTypes() {
+    return types;
+  }
+
+  public Universe getUniverse() {
+    return universe;
+  }
 }

@@ -37,6 +37,11 @@ public class SelfInferior implements Inferior {
   }
 
   @Override
+  public long lookupVtable(String typeName) {
+     return symbolLookup.lookup("_ZTV" + typeName.length() + typeName) + 2 * pointerSize;
+  }
+
+  @Override
   public void detach() {
     // do nothing
   }
