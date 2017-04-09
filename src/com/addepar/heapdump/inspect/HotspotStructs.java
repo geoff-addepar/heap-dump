@@ -95,7 +95,7 @@ public class HotspotStructs {
    * the given struct to have a vtable.
    */
   public <T extends DynamicHotspotStruct, U extends T> U dynamicCast(T struct, Class<U> subclass) {
-    if (getDynamicType(struct).isSubclassOf(getStaticType(subclass))) {
+    if (isInstanceOf(struct, subclass)) {
       return structAt(struct.getAddress(), subclass);
     } else {
       return null;
