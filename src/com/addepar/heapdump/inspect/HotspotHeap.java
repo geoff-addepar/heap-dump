@@ -47,10 +47,9 @@ public class HotspotHeap {
 
     try {
       // Perform a dynamic type check (up until now there isn't a guarantee that the pointer is valid)
-      if (klass == null) {
-        System.out.println("hey we got a null one");
-      }
-      if (klass == null || klass.getAddress() == 0 || !hotspot.getAddressSpace().isMapped(klass.getAddress(), hotspot.getAddressSpace().getPointerSize()) || !klass.isInstanceOf(Klass.class)) {
+      if (klass.getAddress() == 0
+          || !hotspot.getAddressSpace().isMapped(klass.getAddress(), hotspot.getAddressSpace().getPointerSize())
+          || !klass.isInstanceOf(Klass.class)) {
         return false;
       }
     } catch (AddressNotMappedException e) {
