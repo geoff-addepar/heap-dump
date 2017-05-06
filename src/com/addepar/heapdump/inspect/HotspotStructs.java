@@ -13,6 +13,7 @@ import com.addepar.heapdump.inspect.struct.ParallelScavengeHeap;
 import com.addepar.heapdump.inspect.struct.Symbol;
 import com.addepar.heapdump.inspect.struct.Universe;
 import com.addepar.heapdump.inspect.struct.arrayOopDesc;
+import com.addepar.heapdump.inspect.struct.java_lang_Class;
 import com.addepar.heapdump.inspect.struct.oopDesc;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.FieldVisitor;
@@ -71,6 +72,7 @@ public class HotspotStructs {
         CollectedHeap.class,
         Flag.class,
         ImmutableSpace.class,
+        java_lang_Class.class,
         Klass.class,
         MutableSpace.class,
         oopDesc.class,

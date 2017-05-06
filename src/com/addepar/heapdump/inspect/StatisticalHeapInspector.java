@@ -21,19 +21,33 @@ import java.util.Random;
  * @author Geoff Lywood (geoff@addepar.com)
  */
 public final class StatisticalHeapInspector {
-  private static final int SAMPLES = 1000;
+  /**
+   * 2000 samples is:
+   * 99% confident that the numbers are within +/- 2.9%
+   * 95% confident that the numbers are within +/- 2.2%
+   */
+  private static final int SAMPLES = 2000;
+
+  /**
+   * We don't show anything that occupies less than 2% of the heap, because numbers like 1% +/- 3% are meaningless
+   */
+  private static final int MIN_SIGNIFICANT_SAMPLES = 40;
+
+  /**
+   * We need at least this many hits to tell the user that their numbers are ok
+   * 99% confidence that the numbers are within 3% requires 1849 samples on a large population
+   */
+  private static final int MIN_TOTAL_HITS = 1849;
 
   private final PrintWriter out;
   private final Hotspot hotspot;
   private final HotspotHeap heap;
-  private final int heapWordSize;
   private final Random random;
 
   private StatisticalHeapInspector(PrintWriter out, Hotspot hotspot) {
     this.out = out;
     this.hotspot = hotspot;
     this.heap = hotspot.getHeap();
-    this.heapWordSize = hotspot.getConstants().getHeapWordSize();
     this.random = new Random();
   }
 
@@ -45,8 +59,7 @@ public final class StatisticalHeapInspector {
     return gcRuns;
   }
 
-  public void run() {
-    System.gc();
+  private void run() {
     long startGcRuns = getGcRunCount();
     Graph graph = new Graph();
     List<AddressRange> liveRegions = heap.collectLiveRegions();
@@ -122,31 +135,33 @@ public final class StatisticalHeapInspector {
     out.println("Runtime:       " + millis + " ms");
     out.println("# GC Runs:     " + gcRuns);
     out.println();
-    out.println("Hits | Estimated Number | Estimated Total Size | Class");
-    out.println("------------------------------------------------------");
-    List<Node> sortedNodes = new ArrayList<Node>(graph.nodes.values());
-    Collections.sort(sortedNodes, new Comparator<Node>() {
-      @Override
-      public int compare(Node o1, Node o2) {
-        return Long.signum(o2.hits - o1.hits);
-      }
-    });
+    out.println("Hits | % of heap | Estimated Total Size | Estimated Number | Class");
+    out.println("------------------------------------------------------------------");
+    List<Node> sortedNodes = new ArrayList<>(graph.nodes.values());
+    Collections.sort(sortedNodes, Comparator.comparing((Node node) -> node.hits).reversed());
     for (Node node : sortedNodes) {
       // ignore low fidelity stuff
-      if (node.hits <= 2) {
+      if (node.hits <= MIN_SIGNIFICANT_SAMPLES) {
         break;
       }
       String className = node.klassName;
+      double estimatedPercent = (double) node.hits / (double) totalHits * 100.0;
       double sizeOfObject = (double) node.size / (double) node.hits;
-      double estimatedSize = ((double) node.hits * (double) totalHeapSize) / (double) SAMPLES;
+      double estimatedSize = ((double) node.hits * (double) totalHeapSize) / (double) totalHits;
       double estimatedNumber = estimatedSize / sizeOfObject;
-      out.format("%4d | %16.0f | %20.0f | %s\n", node.hits, estimatedNumber, estimatedSize, className);
+      out.format("%4d | %8.1f%% | %20.0f | %16.0f | %s\n",
+          node.hits, estimatedPercent, estimatedSize, estimatedNumber, className);
+    }
+    out.println();
+    if (totalHits > MIN_TOTAL_HITS) {
+      out.println("'% of heap' measurements are within +/- 3%, at the 99% confidence level");
+    } else {
+      out.println("THERE WAS SIGNIFICANT DATA LOSS, NUMBERS MAY BE INACCURATE");
     }
     out.flush();
   }
 
   public static void main(String args[]) throws IOException {
-    System.in.read();
     @SuppressWarnings("UseOfSystemOutOrSystemErr")
     PrintWriter out = new PrintWriter(System.out);
 
@@ -162,14 +177,7 @@ public final class StatisticalHeapInspector {
     long size;
   }
 
-  // Represents an outgoing reference
-  private class Edge {
-    long destKlass;
-    long hits;
-  }
-
   private class Graph {
-    Map<Long, Node> nodes = new HashMap<Long, Node>();
-    Map<Node, Edge> outgoingEdges = new HashMap<Node, Edge>();
+    Map<Long, Node> nodes = new HashMap<>();
   }
 }

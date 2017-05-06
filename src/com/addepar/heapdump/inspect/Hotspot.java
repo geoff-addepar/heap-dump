@@ -3,6 +3,7 @@ package com.addepar.heapdump.inspect;
 import com.addepar.heapdump.inspect.inferior.Inferior;
 import com.addepar.heapdump.inspect.struct.Flag;
 import com.addepar.heapdump.inspect.struct.Universe;
+import com.addepar.heapdump.inspect.struct.java_lang_Class;
 
 /**
  * Top-level representation of a Hotspot VM
@@ -19,6 +20,8 @@ public class Hotspot {
 
   private final Universe universe;
 
+  private final long classOopSizeOffset;
+
   private boolean useCompressedOops = false;
   private boolean useCompressedKlassPointers = false;
 
@@ -32,6 +35,9 @@ public class Hotspot {
     types = new HotspotTypes(addressSpace);
     structs = new HotspotStructs(addressSpace, types, constants);
     universe = structs.staticStruct(Universe.class);
+
+    classOopSizeOffset = structs.staticStruct(java_lang_Class.class)._oop_size_offset();
+
 
     Flag staticFlag = structs.staticStruct(Flag.class);
     Flag curFlag = staticFlag.flags();
@@ -90,5 +96,13 @@ public class Hotspot {
 
   public long arrayLengthOffset() {
     return arrayLengthOffset;
+  }
+
+  public long alignUp(long val, int alignment) {
+    return (val + alignment - 1) & ~(alignment - 1);
+  }
+
+  public long getClassOopSizeOffset() {
+    return classOopSizeOffset;
   }
 }

@@ -27,21 +27,26 @@ public class OopFinder {
    * of the live region.
    */
   public boolean probeForObject(long probeAddress, long bottom) {
+    int missCount = 0;
     long cur = probeAddress & ~(heapWordSize - 1);
     while (Long.compareUnsigned(cur, bottom) >= 0) {
       oop.setAddress(cur);
       oop.getKlass(hotspot, klass);
       if (isLikelyObject()) {
-        if (Long.compareUnsigned(cur + oop.getObjectSize(hotspot, klass), probeAddress) > 0) {
+        long objectSize = oop.getObjectSize(hotspot, klass);
+        if (Long.compareUnsigned(cur + objectSize, probeAddress) > 0) {
           return true; // original address was within the nearest object
         } else {
           // declare this a "miss" even though we might not have walked far enough, and we just
           // stumbled on some spurious data that looked like an Oop header, but the size is busted
-          return false;
+          if (missCount++ > 10) {
+            return false;
+          }
         }
       }
       cur -= heapWordSize;
     }
+
     return false; // not found
   }
 
