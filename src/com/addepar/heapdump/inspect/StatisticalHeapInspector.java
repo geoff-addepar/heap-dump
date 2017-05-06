@@ -46,9 +46,11 @@ public final class StatisticalHeapInspector {
   }
 
   public void run() {
+    System.gc();
     long startGcRuns = getGcRunCount();
     Graph graph = new Graph();
     List<AddressRange> liveRegions = heap.collectLiveRegions();
+    OopFinder finder = new OopFinder(hotspot);
 
     long totalSize = 0L;
 
@@ -70,9 +72,8 @@ public final class StatisticalHeapInspector {
         long top = liveRegion.getEnd();
         long size = top - bottom;
         if (size > randomOffset) {
-          oopDesc probedObject = probeForObject(bottom + randomOffset, bottom);
-          if (probedObject != null) {
-            addToGraph(graph, probedObject);
+          if (finder.probeForObject(bottom + randomOffset, bottom)) {
+            addToGraph(graph, finder.getProbedObject(), finder.getProbedKlass());
             totalHits++;
           }
           break;
@@ -88,43 +89,20 @@ public final class StatisticalHeapInspector {
     write(graph, totalSize, totalHits, endTime - startTime, endGcRuns - startGcRuns);
   }
 
-  /**
-   * Walk backwards to find the start of the object at probeAddress, but don't walk past the bottom
-   * of the live region.
-   */
-  private oopDesc probeForObject(long probeAddress, long bottom) {
-    long cur = probeAddress & ~(heapWordSize - 1);
-    while (Long.compareUnsigned(cur, bottom) >= 0) {
-      if (heap.isLikelyObject(cur, bottom)) {
-        oopDesc oop = hotspot.getStructs().structAt(cur, oopDesc.class);
-        if (Long.compareUnsigned(cur + oop.getObjectSize(hotspot), probeAddress) > 0) {
-          return oop; // original address was within the nearest object
-        } else {
-          // declare this a "miss" even though we might not have walked far enough, and we just
-          // stumbled on some spurious data that looked like an Oop header, but the size is busted
-          return null;
-        }
-      }
-      cur -= heapWordSize;
-    }
-    return null; // not found
-  }
-
-  private void addToGraph(Graph graph, oopDesc object) {
-    Klass klass = object.getKlass(hotspot);
+  private void addToGraph(Graph graph, oopDesc object, Klass klass) {
     Node node = graph.nodes.get(klass.getAddress());
     if (node == null) {
       node = new Node();
-      node.klass = klass;
+      node.klassName = klass.getName(hotspot);
       graph.nodes.put(klass.getAddress(), node);
     }
     node.hits++;
-    node.size += object.getObjectSize(hotspot);
+    node.size += object.getObjectSize(hotspot, klass);
   }
 
   // This is terrible as far as random number generators go.... given that there's a 48-bit LCG
-  // underlying it all, I'm not sure if this is remotely sound, even for small bounds
-  // more or less copied from java.util.Random.nextInt(bound)
+  // underlying it all, I'm not sure if this is remotely sound, even for small bounds.
+  // The algorithm is more or less copied from java.util.Random.nextInt(bound)
   private long randomLong(long bound) {
     long r = random.nextLong();
     long m = bound - 1;
@@ -158,7 +136,7 @@ public final class StatisticalHeapInspector {
       if (node.hits <= 2) {
         break;
       }
-      String className = node.klass.getName(hotspot);
+      String className = node.klassName;
       double sizeOfObject = (double) node.size / (double) node.hits;
       double estimatedSize = ((double) node.hits * (double) totalHeapSize) / (double) SAMPLES;
       double estimatedNumber = estimatedSize / sizeOfObject;
@@ -179,7 +157,7 @@ public final class StatisticalHeapInspector {
   }
 
   private class Node {
-    Klass klass;
+    String klassName;
     long hits;
     long size;
   }

@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static org.objectweb.asm.Opcodes.ACC_FINAL;
 import static org.objectweb.asm.Opcodes.ACC_PRIVATE;
 import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
 import static org.objectweb.asm.Opcodes.ACC_SUPER;
@@ -165,9 +164,9 @@ public class HotspotStructs {
     cw.visit(52, ACC_PUBLIC + ACC_SUPER, implName, null, "java/lang/Object", new String[] { ifaceName });
 
     // Local variables
-    fv = cw.visitField(ACC_PRIVATE + ACC_FINAL, "addressSpace", "Lcom/addepar/heapdump/inspect/AddressSpace;", null, null);
+    fv = cw.visitField(ACC_PRIVATE, "addressSpace", "Lcom/addepar/heapdump/inspect/AddressSpace;", null, null);
     fv.visitEnd();
-    fv = cw.visitField(ACC_PRIVATE + ACC_FINAL, "address", "J", null, null);
+    fv = cw.visitField(ACC_PRIVATE, "address", "J", null, null);
     fv.visitEnd();
 
     // Constructor
@@ -193,6 +192,15 @@ public class HotspotStructs {
     mv.visitInsn(LRETURN);
     mv.visitMaxs(2, 1);
     mv.visitEnd();
+
+    // setAddress
+    mv = cw.visitMethod(ACC_PUBLIC, "setAddress", "(J)V", null, null);
+    mv.visitCode();
+    mv.visitVarInsn(ALOAD, 0);
+    mv.visitVarInsn(LLOAD, 1);
+    mv.visitFieldInsn(PUTFIELD, implName, "address", "J");
+    mv.visitInsn(RETURN);
+    mv.visitMaxs(3, 3);
 
     Class<? extends HotspotStruct> currentIface = iface;
     while (currentIface != HotspotStruct.class && currentIface != DynamicHotspotStruct.class) {
@@ -276,13 +284,23 @@ public class HotspotStructs {
       // caller is doing the right thing
       return;
     }
+
+    if (typeName.endsWith("*")) {
+      if (size != space.getPointerSize()) {
+        throw new RuntimeException("Type width of " + typeName + " does not match expected size of " + size);
+      }
+      return;
+    }
+
     if (typeName.startsWith("const ")) {
       typeName = typeName.substring(6);
     }
+
     HotspotTypes.TypeDescriptor typeDescriptor = types.getType(typeName);
     if (typeDescriptor == null) {
       throw new RuntimeException("Type " + typeName + " was not declared");
     }
+
     if (typeDescriptor.getSize() != size) {
       throw new RuntimeException("Type width of " + typeName + " does not match expected size of " + size);
     }

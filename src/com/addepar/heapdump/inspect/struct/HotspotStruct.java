@@ -6,4 +6,6 @@ package com.addepar.heapdump.inspect.struct;
 public interface HotspotStruct {
 
   long getAddress();
+
+  void setAddress(long address);
 }

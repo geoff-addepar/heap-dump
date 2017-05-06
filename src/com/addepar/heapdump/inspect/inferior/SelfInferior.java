@@ -28,14 +28,13 @@ public class SelfInferior implements Inferior {
   }
 
   @Override
-  public ByteBuffer read(long address, int size) {
-    ByteBuffer buf = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder());
+  public void read(long address, ByteBuffer buf) {
+    buf.clear();
     try {
       selfMem.read(buf, address);
     } catch (IOException e) {
-      return EMPTY_BUFFER;
+      // Returning an empty buffer means that there was a problem reading
     }
-    return buf;
   }
 
   @Override

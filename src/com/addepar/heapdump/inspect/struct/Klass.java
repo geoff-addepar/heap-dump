@@ -34,7 +34,7 @@ public interface Klass extends DynamicHotspotStruct {
           & hotspot.getConstants().getLayoutHelperHeaderSizeMask();
       long elementSize = 1L << ((layoutHelper >> hotspot.getConstants().getLayoutHelperLog2ElementSizeShift())
           & hotspot.getConstants().getLayoutHelperLog2ElementSizeMask());
-      int numElements = arrayOopDesc.length(oop, hotspot);
+      int numElements = hotspot.getAddressSpace().getInt(oop.getAddress() + hotspot.arrayLengthOffset());
       return headerSize + elementSize * numElements;
     }
   }

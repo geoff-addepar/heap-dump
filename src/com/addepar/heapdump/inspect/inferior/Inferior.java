@@ -3,7 +3,7 @@ package com.addepar.heapdump.inspect.inferior;
 import java.nio.ByteBuffer;
 
 public interface Inferior {
-  ByteBuffer read(long address, int size);
+  void read(long address, ByteBuffer buffer);
 
   int getPointerSize();
 

@@ -2,21 +2,22 @@ package com.addepar.heapdump.inspect;
 
 import com.addepar.heapdump.inspect.inferior.AddressNotMappedException;
 import com.addepar.heapdump.inspect.inferior.Inferior;
+import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 
 import java.nio.ByteBuffer;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.nio.ByteOrder;
 
 public class AddressSpace {
   private static final int PAGE_SIZE = 0x1000; // has to be less than or equal to hardware page size
   private static final int PAGE_MASK = PAGE_SIZE - 1;
+  private static final int MAX_CACHE_ENTRIES = 1000;
 
   private final Inferior inferior;
-  private final PageCache cache;
+  private final Long2ObjectLinkedOpenHashMap<ByteBuffer> cache;
 
   public AddressSpace(Inferior inferior) {
     this.inferior = inferior;
-    this.cache = new PageCache();
+    this.cache = new Long2ObjectLinkedOpenHashMap<>();
   }
 
   public final long getPointer(long address) {
@@ -115,10 +116,16 @@ public class AddressSpace {
 
   private ByteBuffer getPage(long address) {
     long pageBase = pageBase(address);
-    ByteBuffer buffer = cache.get(pageBase);
+    ByteBuffer buffer = cache.getAndMoveToLast(pageBase);
     if (buffer == null) {
-      buffer = inferior.read(pageBase, PAGE_SIZE);
+      if (cache.size() >= MAX_CACHE_ENTRIES) {
+        buffer = cache.removeFirst();
+      } else {
+        buffer = ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.nativeOrder());
+      }
+      inferior.read(pageBase, buffer);
       cache.put(pageBase, buffer);
+
     }
     return buffer;
   }
@@ -154,22 +161,11 @@ public class AddressSpace {
     long lastPage = pageBase(address + size);
     for (long curPage = pageBase(address); curPage <= lastPage; curPage++) {
       ByteBuffer page = getPage(address);
-      if (page.capacity() == 0) {
+      if (page.position() == 0) {
         // An empty buffer means the page is not mapped
         return false;
       }
     }
     return true;
-  }
-
-  @SuppressWarnings("serial")
-  private static class PageCache extends LinkedHashMap<Long, ByteBuffer> {
-
-    private static final int MAX_ENTRIES = 1000;
-
-    @Override
-    protected boolean removeEldestEntry(Map.Entry<Long, ByteBuffer> eldest) {
-      return size() > MAX_ENTRIES;
-    }
   }
 }
