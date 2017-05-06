@@ -32,12 +32,12 @@ public class HotspotTypes {
 
     long current = vmTypes;
     while (true) {
-      String typeName = space.getAsciiString(space.getPointer(current + typeNameOffset));
+      String typeName = space.getAsciiString(current + typeNameOffset);
       if (typeName == null) {
         break;
       }
 
-      String superclassName = space.getAsciiString(space.getPointer(current + superclassNameOffset));
+      String superclassName = space.getAsciiString(current + superclassNameOffset);
       boolean isOopType = space.getInt(current + isOopTypeOffset) != 0;
       boolean isIntegerType = space.getInt(current + isIntegerTypeOffset) != 0;
       boolean isUnsigned = space.getInt(current + isUnsignedOffset) != 0;
@@ -72,7 +72,7 @@ public class HotspotTypes {
   }
 
   public TypeDescriptor getDynamicType(long address) {
-    long vtable = space.getPointer(address);
+    Long vtable = space.getPointer(address);
     return vtableMap.get(vtable);
   }
 

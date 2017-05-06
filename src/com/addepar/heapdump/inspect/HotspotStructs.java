@@ -2,6 +2,7 @@ package com.addepar.heapdump.inspect;
 
 import com.addepar.heapdump.inspect.struct.CollectedHeap;
 import com.addepar.heapdump.inspect.struct.DynamicHotspotStruct;
+import com.addepar.heapdump.inspect.struct.Flag;
 import com.addepar.heapdump.inspect.struct.HotspotStruct;
 import com.addepar.heapdump.inspect.struct.ImmutableSpace;
 import com.addepar.heapdump.inspect.struct.Klass;
@@ -9,7 +10,10 @@ import com.addepar.heapdump.inspect.struct.MutableSpace;
 import com.addepar.heapdump.inspect.struct.PSOldGen;
 import com.addepar.heapdump.inspect.struct.PSYoungGen;
 import com.addepar.heapdump.inspect.struct.ParallelScavengeHeap;
+import com.addepar.heapdump.inspect.struct.Symbol;
 import com.addepar.heapdump.inspect.struct.Universe;
+import com.addepar.heapdump.inspect.struct.arrayOopDesc;
+import com.addepar.heapdump.inspect.struct.oopDesc;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
@@ -17,6 +21,7 @@ import org.objectweb.asm.MethodVisitor;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -52,22 +57,28 @@ public class HotspotStructs {
 
   private final AddressSpace space;
   private final HotspotTypes types;
+  private final HotspotConstants constants;
   private final Set<Class<? extends HotspotStruct>> structInterfaces;
   private final Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> constructors;
   private Map<FieldDescriptor, FieldInfo> fieldMap;
 
-  public HotspotStructs(AddressSpace space, HotspotTypes types) {
+  public HotspotStructs(AddressSpace space, HotspotTypes types, HotspotConstants constants) {
     this.space = space;
     this.types = types;
+    this.constants = constants;
     this.fieldMap = generateFieldMap();
     this.structInterfaces = new HashSet<>(Arrays.asList(
+        arrayOopDesc.class,
         CollectedHeap.class,
+        Flag.class,
         ImmutableSpace.class,
+        Klass.class,
         MutableSpace.class,
+        oopDesc.class,
         ParallelScavengeHeap.class,
         PSOldGen.class,
         PSYoungGen.class,
-        Klass.class,
+        Symbol.class,
         Universe.class
     ));
     this.constructors = generateImplementations();
@@ -103,7 +114,8 @@ public class HotspotStructs {
   }
 
   public <T extends DynamicHotspotStruct> boolean isInstanceOf(T struct, Class<? extends T> subclass) {
-    return getDynamicType(struct).isSubclassOf(getStaticType(subclass));
+    HotspotTypes.TypeDescriptor dynamicType = getDynamicType(struct);
+    return dynamicType != null && dynamicType.isSubclassOf(getStaticType(subclass));
   }
 
   public HotspotTypes.TypeDescriptor getDynamicType(DynamicHotspotStruct struct) {
@@ -114,9 +126,22 @@ public class HotspotStructs {
     return types.getType(subclass.getSimpleName());
   }
 
+  /**
+   * Look up the offset an "unchecked" field, which has no type
+   */
+  public long offsetOf(String structName, String fieldName) {
+    FieldDescriptor descriptor = new FieldDescriptor(structName, fieldName, null);
+    FieldInfo info = fieldMap.get(descriptor);
+    if (info.isStatic) {
+      throw new IllegalStateException("Cannot get the offset of a static field");
+    } else {
+      return info.offset;
+    }
+  }
+
   private Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> generateImplementations() {
     Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> map = new HashMap<>();
-    AsmClassLoader loader = new AsmClassLoader(this);
+    AsmClassLoader loader = new AsmClassLoader(this, constants);
     for (Class<? extends HotspotStruct> iface : structInterfaces) {
       map.put(iface, generateImplementation(iface, loader));
     }
@@ -177,15 +202,12 @@ public class HotspotStructs {
       }
 
       for (Method method : currentIface.getDeclaredMethods()) {
-        if (method.isDefault()) {
+        if (!Modifier.isAbstract(method.getModifiers())) {
           continue;
         }
 
         FieldType fieldType = method.getAnnotation(FieldType.class);
-        if (fieldType == null) {
-          throw new RuntimeException("Missing FieldType on " + method);
-        }
-        String fieldTypeName = fieldType.value();
+        String fieldTypeName = fieldType != null ? fieldType.value() : null;
         FieldDescriptor descriptor = new FieldDescriptor(currentIface.getSimpleName(), method.getName(), fieldTypeName);
 
         FieldInfo fieldInfo = fieldMap.get(descriptor);
@@ -208,10 +230,17 @@ public class HotspotStructs {
           generatePrimitiveMethod(cw, method, fieldInfo, "I", "getInt", implName, "I");
         } else if (returnType == long.class) {
           checkTypeWidth(fieldTypeName, 8);
-          generatePrimitiveMethod(cw, method, fieldInfo, "J", "getLong", implName, "J");
+          if (method.getAnnotation(AddressField.class) != null) {
+            generatePrimitiveMethod(cw, method, fieldInfo, "J", "getPointer", implName, "J");
+          } else {
+            generatePrimitiveMethod(cw, method, fieldInfo, "J", "getLong", implName, "J");
+          }
         } else if (returnType == short.class) {
           checkTypeWidth(fieldTypeName, 2);
           generatePrimitiveMethod(cw, method, fieldInfo, "S", "getShort", implName, "S");
+        } else if (returnType == String.class) {
+          checkTypeWidth(fieldTypeName, space.getPointerSize());
+          generateStringMethod(cw, method, fieldInfo,implName);
         } else if (structInterfaces.contains(returnType)) {
           if (!fieldTypeName.endsWith("*")) {
             checkTypeWidth(fieldTypeName, space.getPointerSize());
@@ -242,6 +271,14 @@ public class HotspotStructs {
   }
 
   private void checkTypeWidth(String typeName, int size) {
+    if (typeName == null) {
+      // unchecked fields (e.g. Flag._addr) can't be verified, so just let them through and assume the
+      // caller is doing the right thing
+      return;
+    }
+    if (typeName.startsWith("const ")) {
+      typeName = typeName.substring(6);
+    }
     HotspotTypes.TypeDescriptor typeDescriptor = types.getType(typeName);
     if (typeDescriptor == null) {
       throw new RuntimeException("Type " + typeName + " was not declared");
@@ -278,6 +315,26 @@ public class HotspotStructs {
     } else {
       mv.visitInsn(IRETURN);
     }
+    mv.visitMaxs(5, 1);
+    mv.visitEnd();
+  }
+
+  private void generateStringMethod(ClassWriter cw, Method method, FieldInfo fieldInfo, String impl) {
+    MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, method.getName(), "()Ljava/lang/String;", null, null);
+    mv.visitCode();
+    mv.visitVarInsn(ALOAD, 0);
+    mv.visitFieldInsn(GETFIELD, impl, "addressSpace", "Lcom/addepar/heapdump/inspect/AddressSpace;");
+    if (fieldInfo.isStatic) {
+      mv.visitLdcInsn(fieldInfo.address);
+    } else {
+      mv.visitLdcInsn(fieldInfo.offset);
+      mv.visitVarInsn(ALOAD, 0);
+      mv.visitFieldInsn(GETFIELD, impl, "address", "J");
+      mv.visitInsn(LADD);
+    }
+    mv.visitMethodInsn(INVOKEVIRTUAL, "com/addepar/heapdump/inspect/AddressSpace", "getAsciiString",
+        "(J)Ljava/lang/String;", false);
+    mv.visitInsn(ARETURN);
     mv.visitMaxs(5, 1);
     mv.visitEnd();
   }
@@ -333,12 +390,12 @@ public class HotspotStructs {
 
     Map<FieldDescriptor, FieldInfo> fieldMap = new HashMap<>();
     while (true) {
-      String typeName = space.getAsciiString(space.getPointer(current + typeNameOffset));
+      String typeName = space.getAsciiString(current + typeNameOffset);
       if (typeName == null) {
         break;
       }
-      String fieldName = space.getAsciiString(space.getPointer(current + fieldNameOffset));
-      String typeString = space.getAsciiString(space.getPointer(current + typeStringOffset));
+      String fieldName = space.getAsciiString(current + fieldNameOffset);
+      String typeString = space.getAsciiString(current + typeStringOffset);
       FieldDescriptor descriptor = new FieldDescriptor(typeName, fieldName, typeString);
 
       FieldInfo info = new FieldInfo(space.getInt(current + isStaticOffset) != 0,
@@ -368,7 +425,7 @@ public class HotspotStructs {
 
     FieldDescriptor(String typeName, String fieldName, String typeString) {
       this.typeName = typeName;
-      this.fieldName = fieldName;
+      this.fieldName = fieldName.replace(".", "_");
       this.typeString = typeString;
     }
 
@@ -411,9 +468,11 @@ public class HotspotStructs {
 
   public static class AsmClassLoader extends ClassLoader {
     private final HotspotStructs hotspotStructs;
+    private final HotspotConstants hotspotConstants;
 
-    public AsmClassLoader(HotspotStructs hotspotStructs) {
+    public AsmClassLoader(HotspotStructs hotspotStructs, HotspotConstants hotspotConstants) {
       this.hotspotStructs = hotspotStructs;
+      this.hotspotConstants = hotspotConstants;
     }
 
     Class<?> defineClass(String name, byte[] classBytes) {
@@ -422,6 +481,10 @@ public class HotspotStructs {
 
     public HotspotStructs getHotspotStructs() {
       return hotspotStructs;
+    }
+
+    public HotspotConstants getHotspotConstants() {
+      return hotspotConstants;
     }
   }
 }

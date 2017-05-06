@@ -3,7 +3,8 @@ package com.addepar.heapdump.inspect.struct;
 import com.addepar.heapdump.inspect.HotspotStructs;
 
 /**
- * Hotspot types that are expected to have a vtable should extend from this interface.
+ * Hotspot types that are expected to have a vtable should extend from this interface. It adds support for dynamic
+ * type checks and dynamic casts.
  */
 public interface DynamicHotspotStruct extends HotspotStruct {
 

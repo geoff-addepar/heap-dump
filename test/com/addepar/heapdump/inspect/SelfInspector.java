@@ -6,18 +6,20 @@ import com.addepar.heapdump.inspect.struct.PSOldGen;
 import com.addepar.heapdump.inspect.struct.ParallelScavengeHeap;
 import com.addepar.heapdump.inspect.struct.Universe;
 
+import java.io.IOException;
+
 public class SelfInspector {
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
     Inferior inferior = new SelfInferior();
     AddressSpace space = new AddressSpace(inferior);
     HotspotTypes types = new HotspotTypes(space);
-    HotspotStructs hotspotStructs = new HotspotStructs(space, types);
+    HotspotConstants constants = new HotspotConstants(space);
+    HotspotStructs hotspotStructs = new HotspotStructs(space, types, constants);
 
     Universe universe = hotspotStructs.staticStruct(Universe.class);
     System.out.println("Is GC active? " + universe._collectedHeap()._is_gc_active());
 
-    HotspotConstants constants = new HotspotConstants(space);
     System.out.println("HeapWordSize=" + constants.getHeapWordSize());
 
     System.out.println("ArrayKlass's superclass is " + types.getType("ArrayKlass").getSuperclassName());

@@ -1,5 +1,6 @@
 package com.addepar.heapdump.inspect;
 
+import com.addepar.heapdump.inspect.inferior.AddressNotMappedException;
 import com.addepar.heapdump.inspect.inferior.Inferior;
 
 import java.nio.ByteBuffer;
@@ -7,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class AddressSpace {
-  private static final int PAGE_SIZE = 0x10000;
+  private static final int PAGE_SIZE = 0x1000; // has to be less than or equal to hardware page size
   private static final int PAGE_MASK = PAGE_SIZE - 1;
 
   private final Inferior inferior;
@@ -27,7 +28,12 @@ public class AddressSpace {
   }
 
   public byte getByte(long address) {
-    return getPage(address).get(pageOffset(address));
+    ByteBuffer buf = getPage(address);
+    try {
+      return buf.get(pageOffset(address));
+    } catch (IndexOutOfBoundsException e) {
+      throw new AddressNotMappedException(address);
+    }
   }
 
   public boolean getBoolean(long address) {
@@ -36,25 +42,49 @@ public class AddressSpace {
 
   public char getChar(long address) {
     checkAlignment(address, 2);
-    return getPage(address).getChar(pageOffset(address));
+    ByteBuffer buf = getPage(address);
+    try {
+      return buf.getChar(pageOffset(address));
+    } catch (IndexOutOfBoundsException e) {
+      throw new AddressNotMappedException(address);
+    }
   }
 
   public short getShort(long address) {
     checkAlignment(address, 2);
-    return getPage(address).getShort(pageOffset(address));
+    ByteBuffer buf = getPage(address);
+    try {
+      return buf.getShort(pageOffset(address));
+    } catch (IndexOutOfBoundsException e) {
+      throw new AddressNotMappedException(address);
+    }
   }
 
   public int getInt(long address) {
     checkAlignment(address, 4);
-    return getPage(address).getInt(pageOffset(address));
+    ByteBuffer buf = getPage(address);
+    try {
+      return buf.getInt(pageOffset(address));
+    } catch (IndexOutOfBoundsException e) {
+      throw new AddressNotMappedException(address);
+    }
   }
 
   public long getLong(long address) {
     checkAlignment(address, 8);
-    return getPage(address).getLong(pageOffset(address));
+    ByteBuffer buf = getPage(address);
+    try {
+      return buf.getLong(pageOffset(address));
+    } catch (IndexOutOfBoundsException e) {
+      throw new AddressNotMappedException(address);
+    }
   }
 
-  public String getAsciiString(long address) {
+  /**
+   * Careful, this expects to be passed the address of a string pointer, i.e. a char**
+   */
+  public String getAsciiString(long addressOfStringPointer) {
+    long address = getPointer(addressOfStringPointer);
     if (address == 0) {
       return null;
     }
@@ -65,11 +95,15 @@ public class AddressSpace {
     StringBuilder builder = new StringBuilder();
     ByteBuffer buffer = getPage(base);
     while (true) {
-      byte ch = buffer.get(offset++);
-      if (ch == 0) {
-        break;
+      try {
+        byte ch = buffer.get(offset++);
+        if (ch == 0) {
+          break;
+        }
+        builder.append((char) ch);
+      } catch (IndexOutOfBoundsException e) {
+        throw new AddressNotMappedException(base + offset);
       }
-      builder.append((char) ch);
       if (offset == PAGE_SIZE) {
         offset = 0;
         base += PAGE_SIZE;
@@ -114,6 +148,18 @@ public class AddressSpace {
 
   public int getPointerSize() {
     return inferior.getPointerSize();
+  }
+
+  public boolean isMapped(long address, int size) {
+    long lastPage = pageBase(address + size);
+    for (long curPage = pageBase(address); curPage <= lastPage; curPage++) {
+      ByteBuffer page = getPage(address);
+      if (page.capacity() == 0) {
+        // An empty buffer means the page is not mapped
+        return false;
+      }
+    }
+    return true;
   }
 
   @SuppressWarnings("serial")

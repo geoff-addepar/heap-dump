@@ -177,7 +177,12 @@ public class SelfDebugger extends DebuggerBase implements JVMDebugger {
   @Override
   public Address lookup(String objectName, String symbol) {
     // It's safe to ignore objectName. See libproc_impl.c and lookup_symbol()
-    long value = selfSymbolLookup.lookup(symbol);
+    long value;
+    try {
+      value = selfSymbolLookup.lookup(symbol);
+    } catch (NoSuchSymbolException e) {
+      return null;
+    }
     if (value == 0) {
       return null;
     }
