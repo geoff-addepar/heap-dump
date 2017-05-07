@@ -43,6 +43,14 @@ public class SelfInferior implements Inferior {
   @Override
   public void read(long address, ByteBuffer buf) {
     buf.clear();
+
+    // It seems that FileChannelImpl won't take a negative offset. There are addresses up in the negative part of the
+    // address space (mainly kernel stuff, or the VDSO). Since pread() takes a signed off_t, I'm not sure anything can
+    // read this...
+    if (address < 0) {
+      return;
+    }
+
     try {
       selfMem.read(buf, address);
     } catch (IOException e) {
@@ -58,9 +66,9 @@ public class SelfInferior implements Inferior {
     // - The address is in the array. Since the end of each range is represented by the last mapped byte, it doesn't
     //   matter if it's the start or the end. All of these addresses are mapped. This is the "index >= 0" case.
     // - The address is mapped, but not explicitly in the array. In this case, the "insertion point" is going to be
-    //   an odd-indexed array element. The binary search's return value will therefore be odd.
+    //   an odd-indexed array element. The binary search's return value will therefore be even.
     // - The address is not mapped, and not in the array. In this case, the "insertion point" is going to be
-    //   an even-indexed array element. The binary search's return value will therefore be even.
+    //   an even-indexed array element. The binary search's return value will therefore be odd.
     return (index & 1) == 0 || index >= 0;
   }
 
