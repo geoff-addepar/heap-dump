@@ -4,6 +4,8 @@ import com.addepar.heapdump.inspect.inferior.Inferior;
 import com.addepar.heapdump.inspect.inferior.SelfInferior;
 import com.addepar.heapdump.inspect.struct.Klass;
 import com.addepar.heapdump.inspect.struct.oopDesc;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -60,16 +62,17 @@ public final class StatisticalHeapInspector {
   }
 
   private void run() {
+    hotspot.getAddressSpace().clearCache();
     long startGcRuns = getGcRunCount();
     Graph graph = new Graph();
-    List<AddressRange> liveRegions = heap.collectLiveRegions();
+    RangeSet<Long> liveRegions = heap.collectLiveRegions();
     OopFinder finder = new OopFinder(hotspot);
 
     long totalSize = 0L;
 
-    for (AddressRange liveRegion : liveRegions) {
-      long bottom = liveRegion.getStart();
-      long top = liveRegion.getEnd();
+    for (Range<Long> liveRegion : liveRegions.asRanges()) {
+      long bottom = liveRegion.lowerEndpoint();
+      long top = liveRegion.upperEndpoint();
       totalSize += top - bottom;
     }
 
@@ -80,9 +83,9 @@ public final class StatisticalHeapInspector {
 
       long randomOffset = randomLong(totalSize);
 
-      for (AddressRange liveRegion : liveRegions) {
-        long bottom = liveRegion.getStart();
-        long top = liveRegion.getEnd();
+      for (Range<Long> liveRegion : liveRegions.asRanges()) {
+        long bottom = liveRegion.lowerEndpoint();
+        long top = liveRegion.upperEndpoint();
         long size = top - bottom;
         if (size > randomOffset) {
           if (finder.probeForObject(bottom + randomOffset, bottom)) {

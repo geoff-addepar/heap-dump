@@ -24,6 +24,8 @@ public class Hotspot {
 
   private boolean useCompressedOops = false;
   private boolean useCompressedKlassPointers = false;
+  private boolean useTLAB = false;
+  private int minObjAlignmentInBytes = 8;
 
   private final long narrowKlassShift;
   private final long narrowKlassBase;
@@ -47,6 +49,10 @@ public class Hotspot {
         useCompressedKlassPointers = addressSpace.getBoolean(curFlag._addr());
       } else if ("UseCompressedOops".equals(curName)) {
         useCompressedOops = addressSpace.getBoolean(curFlag._addr());
+      } else if ("UseTLAB".equals(curName)) {
+        useTLAB = addressSpace.getBoolean(curFlag._addr());
+      } else if ("ObjectAlignmentInBytes".equals(curName)) {
+        minObjAlignmentInBytes = addressSpace.getInt(curFlag._addr());
       }
       curFlag = structs.structAt(curFlag.getAddress() + types.getType("Flag").getSize(), Flag.class);
     }
@@ -92,6 +98,14 @@ public class Hotspot {
 
   public long decompressKlassPointer(int compressedPointer) {
     return (Integer.toUnsignedLong(compressedPointer) << narrowKlassShift) + narrowKlassBase;
+  }
+
+  public boolean useTLAB() {
+    return useTLAB;
+  }
+
+  public int getMinObjAlignmentInBytes() {
+    return minObjAlignmentInBytes;
   }
 
   public long arrayLengthOffset() {

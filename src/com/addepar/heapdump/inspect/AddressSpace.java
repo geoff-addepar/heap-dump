@@ -159,4 +159,8 @@ public class AddressSpace {
   public boolean isMapped(long address) {
     return inferior.isMapped(address);
   }
+
+  public void clearCache() {
+    cache.clear();
+  }
 }

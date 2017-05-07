@@ -49,12 +49,12 @@ public interface Klass extends DynamicHotspotStruct {
           & hotspot.getConstants().getLayoutHelperLog2ElementSizeMask();
       // The number of elements is stored at the beginning of the array object
       int numElements = hotspot.getAddressSpace().getInt(oop.getAddress() + hotspot.arrayLengthOffset());
-      // This should align up to MinObjAlignmentInBytes but I don't see how to get that constant
-      return hotspot.alignUp(headerSize + (numElements << log2ElementSize), hotspot.getAddressSpace().getPointerSize());
+      return hotspot.alignUp(headerSize + (numElements << log2ElementSize), hotspot.getMinObjAlignmentInBytes());
     } else {
       // The hotspot source code seems to imply this could happen, but I honestly don't understand how it's possible,
       // given the current Oop hierarchy.
-      throw new RuntimeException("Zero size object??? klass=" + hotspot.getStructs().getDynamicType(this));
+      throw new RuntimeException("Zero size object??? klassAddress=0x" + Long.toHexString(this.getAddress())
+          + " with possible type " + hotspot.getStructs().getDynamicType(this));
     }
   }
 }

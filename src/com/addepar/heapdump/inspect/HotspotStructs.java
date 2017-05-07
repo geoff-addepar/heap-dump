@@ -1,16 +1,21 @@
 package com.addepar.heapdump.inspect;
 
+import com.addepar.heapdump.inspect.struct.Abstract_VM_Version;
 import com.addepar.heapdump.inspect.struct.CollectedHeap;
 import com.addepar.heapdump.inspect.struct.DynamicHotspotStruct;
 import com.addepar.heapdump.inspect.struct.Flag;
 import com.addepar.heapdump.inspect.struct.HotspotStruct;
 import com.addepar.heapdump.inspect.struct.ImmutableSpace;
+import com.addepar.heapdump.inspect.struct.JavaThread;
 import com.addepar.heapdump.inspect.struct.Klass;
 import com.addepar.heapdump.inspect.struct.MutableSpace;
 import com.addepar.heapdump.inspect.struct.PSOldGen;
 import com.addepar.heapdump.inspect.struct.PSYoungGen;
 import com.addepar.heapdump.inspect.struct.ParallelScavengeHeap;
 import com.addepar.heapdump.inspect.struct.Symbol;
+import com.addepar.heapdump.inspect.struct.Thread;
+import com.addepar.heapdump.inspect.struct.ThreadLocalAllocBuffer;
+import com.addepar.heapdump.inspect.struct.Threads;
 import com.addepar.heapdump.inspect.struct.Universe;
 import com.addepar.heapdump.inspect.struct.arrayOopDesc;
 import com.addepar.heapdump.inspect.struct.java_lang_Class;
@@ -68,11 +73,13 @@ public class HotspotStructs {
     this.constants = constants;
     this.fieldMap = generateFieldMap();
     this.structInterfaces = new HashSet<>(Arrays.asList(
+        Abstract_VM_Version.class,
         arrayOopDesc.class,
         CollectedHeap.class,
         Flag.class,
         ImmutableSpace.class,
         java_lang_Class.class,
+        JavaThread.class,
         Klass.class,
         MutableSpace.class,
         oopDesc.class,
@@ -80,6 +87,9 @@ public class HotspotStructs {
         PSOldGen.class,
         PSYoungGen.class,
         Symbol.class,
+        Thread.class,
+        ThreadLocalAllocBuffer.class,
+        Threads.class,
         Universe.class
     ));
     this.constructors = generateImplementations();
@@ -252,9 +262,6 @@ public class HotspotStructs {
           checkTypeWidth(fieldTypeName, space.getPointerSize());
           generateStringMethod(cw, method, fieldInfo,implName);
         } else if (structInterfaces.contains(returnType)) {
-          if (!fieldTypeName.endsWith("*")) {
-            checkTypeWidth(fieldTypeName, space.getPointerSize());
-          }
           generateWrapperMethod(cw, method, fieldInfo, returnType.getName().replace('.', '/'), implName);
         } else {
           throw new IllegalStateException("Unrecognized return type " + returnType + " for method " + method);
