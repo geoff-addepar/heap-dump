@@ -125,7 +125,6 @@ public class AddressSpace {
       }
       inferior.read(pageBase, buffer);
       cache.put(pageBase, buffer);
-
     }
     return buffer;
   }
@@ -157,15 +156,7 @@ public class AddressSpace {
     return inferior.getPointerSize();
   }
 
-  public boolean isMapped(long address, int size) {
-    long lastPage = pageBase(address + size);
-    for (long curPage = pageBase(address); curPage <= lastPage; curPage++) {
-      ByteBuffer page = getPage(address);
-      if (page.position() == 0) {
-        // An empty buffer means the page is not mapped
-        return false;
-      }
-    }
-    return true;
+  public boolean isMapped(long address) {
+    return inferior.isMapped(address);
   }
 }

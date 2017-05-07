@@ -73,7 +73,7 @@ public class OopFinder {
     try {
       // Perform a dynamic type check (up until now there isn't a guarantee that the pointer is valid)
       if (klass.getAddress() == 0
-          || !hotspot.getAddressSpace().isMapped(klass.getAddress(), hotspot.getAddressSpace().getPointerSize())
+          || !hotspot.getAddressSpace().isMapped(klass.getAddress())
           || !klass.isInstanceOf(Klass.class)) {
         return false;
       }
