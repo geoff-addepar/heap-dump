@@ -87,12 +87,8 @@ public final class SelfInferior implements Inferior {
   }
 
   @Override
-  public void detach() {
-    try {
-      selfMem.close();
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
+  public void detach() throws IOException {
+    selfMem.close();
   }
 
   public void reset() {

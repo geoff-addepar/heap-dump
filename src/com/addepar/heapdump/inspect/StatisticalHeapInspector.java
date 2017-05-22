@@ -157,6 +157,7 @@ public final class StatisticalHeapInspector {
     Hotspot hotspot = new Hotspot(inferior);
     StatisticalHeapInspector dumper = new StatisticalHeapInspector(out, hotspot);
     dumper.run();
+    inferior.detach();
   }
 
   private class Node {

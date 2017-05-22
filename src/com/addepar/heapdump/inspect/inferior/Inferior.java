@@ -1,5 +1,6 @@
 package com.addepar.heapdump.inspect.inferior;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public interface Inferior {
@@ -18,5 +19,5 @@ public interface Inferior {
 
   long lookupVtable(String typeName);
 
-  void detach();
+  void detach() throws IOException;
 }
