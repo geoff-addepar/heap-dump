@@ -3,6 +3,9 @@ package com.addepar.heapdump.inspect;
 import com.addepar.heapdump.inspect.inferior.AddressNotMappedException;
 import com.addepar.heapdump.inspect.struct.Klass;
 import com.addepar.heapdump.inspect.struct.oopDesc;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 
 /**
  * A helper that can be used to find the nearest object header to a given heap location.
@@ -10,15 +13,19 @@ import com.addepar.heapdump.inspect.struct.oopDesc;
  * This class is not thread safe.
  */
 public class OopFinder {
+  private static final long MIN_LARGE_OBJECT_SIZE = 0x1000;
+
   private final Hotspot hotspot;
   private final oopDesc oop;
   private final Klass klass;
+  private final RangeSet<Long> largeObjects;
   private final long heapWordSize;
 
   public OopFinder(Hotspot hotspot) {
     this.hotspot = hotspot;
     this.oop = hotspot.getStructs().staticStruct(oopDesc.class);
     this.klass = hotspot.getStructs().staticStruct(Klass.class);
+    this.largeObjects = TreeRangeSet.create();
     this.heapWordSize = hotspot.getConstants().getHeapWordSize();
   }
 
@@ -27,6 +34,12 @@ public class OopFinder {
    * of the live region.
    */
   public boolean probeForObject(long probeAddress, long bottom) {
+    Range<Long> largeObject = largeObjects.rangeContaining(probeAddress);
+    if (largeObject != null) {
+      oop.setAddress(largeObject.lowerEndpoint());
+      oop.getKlass(hotspot, klass);
+      return true;
+    }
     long cur = probeAddress & ~(heapWordSize - 1);
     while (Long.compareUnsigned(cur, bottom) >= 0) {
       oop.setAddress(cur);
@@ -34,6 +47,9 @@ public class OopFinder {
       if (isLikelyObject()) {
         long objectSize = oop.getObjectSize(hotspot, klass);
         if (Long.compareUnsigned(cur + objectSize, probeAddress) > 0) {
+          if (probeAddress - cur > MIN_LARGE_OBJECT_SIZE) {
+            largeObjects.add(Range.closedOpen(cur, cur + objectSize));
+          }
           return true; // original address was within the nearest object
         }
       }

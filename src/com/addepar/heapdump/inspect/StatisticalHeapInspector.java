@@ -121,7 +121,7 @@ public final class StatisticalHeapInspector {
     out.println("Total samples: " + SAMPLES);
     out.println("Total hits:    " + totalHits);
     out.println("Runtime:       " + millis + " ms");
-    out.println("# GC Runs:     " + gcRuns);
+    out.println("GC Runs:       " + gcRuns);
     out.println();
     out.println("Hits | % of heap | Estimated Total Size | Estimated Number | Class");
     out.println("------------------------------------------------------------------");
@@ -156,11 +156,6 @@ public final class StatisticalHeapInspector {
     Inferior inferior = new SelfInferior();
     Hotspot hotspot = new Hotspot(inferior);
     StatisticalHeapInspector dumper = new StatisticalHeapInspector(out, hotspot);
-    dumper.run();
-    out.println();
-    out.println("==========================================================================");
-    System.in.read();
-    out.println();
     dumper.run();
   }
 

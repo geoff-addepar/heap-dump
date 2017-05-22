@@ -65,6 +65,7 @@ public class HotspotStructs {
   private final HotspotConstants constants;
   private final Set<Class<? extends HotspotStruct>> structInterfaces;
   private final Map<Class<? extends HotspotStruct>, Constructor<? extends HotspotStruct>> constructors;
+  private final Map<Class<? extends HotspotStruct>, HotspotTypes.TypeDescriptor> staticTypes;
   private Map<FieldDescriptor, FieldInfo> fieldMap;
 
   public HotspotStructs(AddressSpace space, HotspotTypes types, HotspotConstants constants) {
@@ -92,6 +93,7 @@ public class HotspotStructs {
         Threads.class,
         Universe.class
     ));
+    this.staticTypes = generateStaticTypes();
     this.constructors = generateImplementations();
   }
 
@@ -134,7 +136,7 @@ public class HotspotStructs {
   }
 
   public HotspotTypes.TypeDescriptor getStaticType(Class<? extends HotspotStruct> subclass) {
-    return types.getType(subclass.getSimpleName());
+    return staticTypes.get(subclass);
   }
 
   /**
@@ -401,6 +403,14 @@ public class HotspotStructs {
     mv.visitInsn(ARETURN);
     mv.visitMaxs(8, 1);
     mv.visitEnd();
+  }
+
+  private Map<Class<? extends HotspotStruct>, HotspotTypes.TypeDescriptor> generateStaticTypes() {
+    Map<Class<? extends HotspotStruct>, HotspotTypes.TypeDescriptor> result = new HashMap<>();
+    for (Class<? extends HotspotStruct> iface : structInterfaces) {
+      result.put(iface, types.getType(iface.getSimpleName()));
+    }
+    return result;
   }
 
   private Map<FieldDescriptor, FieldInfo> generateFieldMap() {

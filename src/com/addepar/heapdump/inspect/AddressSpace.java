@@ -3,14 +3,16 @@ package com.addepar.heapdump.inspect;
 import com.addepar.heapdump.inspect.inferior.AddressNotMappedException;
 import com.addepar.heapdump.inspect.inferior.Inferior;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.objects.ObjectIterator;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public class AddressSpace {
+public final class AddressSpace {
   private static final int PAGE_SIZE = 0x1000; // has to be less than or equal to hardware page size
   private static final int PAGE_MASK = PAGE_SIZE - 1;
-  private static final int MAX_CACHE_ENTRIES = 1000;
+  private static final int MAX_CACHE_ENTRIES = 5000;
 
   private final Inferior inferior;
   private final Long2ObjectLinkedOpenHashMap<ByteBuffer> cache;
@@ -18,9 +20,13 @@ public class AddressSpace {
   public AddressSpace(Inferior inferior) {
     this.inferior = inferior;
     this.cache = new Long2ObjectLinkedOpenHashMap<>();
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
+      // put dummy entries in the cache, with hasRemaining() = true so that it reloads on first use
+      cache.put(i, ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.nativeOrder()));
+    }
   }
 
-  public final long getPointer(long address) {
+  public long getPointer(long address) {
     if (inferior.getPointerSize() == 8) {
       return getLong(address);
     } else {
@@ -117,13 +123,22 @@ public class AddressSpace {
   private ByteBuffer getPage(long address) {
     long pageBase = pageBase(address);
     ByteBuffer buffer = cache.getAndMoveToLast(pageBase);
-    if (buffer == null) {
-      if (cache.size() >= MAX_CACHE_ENTRIES) {
+
+    // hasRemaining() is used as a flag that indicates that a read has not yet been done.
+    if (buffer == null || buffer.hasRemaining()) {
+      if (buffer == null) {
         buffer = cache.removeFirst();
-      } else {
-        buffer = ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.nativeOrder());
       }
+
+      buffer.clear();
       inferior.read(pageBase, buffer);
+
+      // An incomplete read indicates that a page was not mapped. We need to set the limit to 0 so that bounds checks
+      // will happen appropriately. Setting the limit to 0 also ensures that hasRemaining() returns false.
+      if (buffer.hasRemaining()) {
+        buffer.limit(0);
+      }
+
       cache.put(pageBase, buffer);
     }
     return buffer;
@@ -161,6 +176,9 @@ public class AddressSpace {
   }
 
   public void clearCache() {
-    cache.clear();
+    ObjectIterator<Long2ObjectMap.Entry<ByteBuffer>> it = cache.long2ObjectEntrySet().fastIterator();
+    while (it.hasNext()) {
+      it.next().getValue().clear(); // set position less than limit, make hasRemaining() return true so that it reloads
+    }
   }
 }

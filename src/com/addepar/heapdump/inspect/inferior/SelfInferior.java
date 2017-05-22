@@ -4,7 +4,6 @@ import it.unimi.dsi.fastutil.longs.LongArrayList;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -17,9 +16,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class SelfInferior implements Inferior {
-  private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0).order(ByteOrder.nativeOrder());
-
+public final class SelfInferior implements Inferior {
   private FileChannel selfMem;
   private Map<String, Long> symbols = new HashMap<>();
   private long[] mappedRanges; // even indexes are starts, odd indexes are ends
@@ -42,8 +39,6 @@ public class SelfInferior implements Inferior {
 
   @Override
   public void read(long address, ByteBuffer buf) {
-    buf.clear();
-
     // It seems that FileChannelImpl won't take a negative offset. There are addresses up in the negative part of the
     // address space (mainly kernel stuff, or the VDSO). Since pread() takes a signed off_t, I'm not sure anything can
     // read this...

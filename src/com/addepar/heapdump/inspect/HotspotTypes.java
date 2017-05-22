@@ -1,6 +1,7 @@
 package com.addepar.heapdump.inspect;
 
 import com.addepar.heapdump.inspect.inferior.NoSuchSymbolException;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,7 +13,7 @@ public class HotspotTypes {
 
   private final AddressSpace space;
   private final Map<String, TypeDescriptor> typeMap = new HashMap<>();
-  private final Map<Long, TypeDescriptor> vtableMap = new HashMap<>();
+  private final Long2ObjectOpenHashMap<TypeDescriptor> vtableMap = new Long2ObjectOpenHashMap<>();
 
   public HotspotTypes(AddressSpace space) {
     this.space = space;
@@ -72,7 +73,7 @@ public class HotspotTypes {
   }
 
   public TypeDescriptor getDynamicType(long address) {
-    Long vtable = space.getPointer(address);
+    long vtable = space.getPointer(address);
     return vtableMap.get(vtable);
   }
 
