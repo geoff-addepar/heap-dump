@@ -60,7 +60,9 @@ public final class StatisticalHeapInspector {
   }
 
   private void run() {
-    hotspot.getAddressSpace().clearCache();
+    long startTime = System.currentTimeMillis();
+
+    hotspot.reset();
     long startGcRuns = getGcRunCount();
     Graph graph = new Graph();
     RangeSet<Long> liveRegions = heap.collectLiveRegions();
@@ -73,8 +75,6 @@ public final class StatisticalHeapInspector {
       long top = liveRegion.upperEndpoint();
       totalSize += top - bottom;
     }
-
-    long startTime = System.currentTimeMillis();
 
     int totalHits = 0;
     for (int i = 0; i < SAMPLES; i++) {

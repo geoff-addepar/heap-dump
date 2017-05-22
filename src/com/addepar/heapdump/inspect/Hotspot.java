@@ -119,4 +119,8 @@ public class Hotspot {
   public long getClassOopSizeOffset() {
     return classOopSizeOffset;
   }
+
+  public void reset() {
+    addressSpace.reset();
+  }
 }

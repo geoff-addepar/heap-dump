@@ -7,6 +7,11 @@ public interface Inferior {
 
   boolean isMapped(long address);
 
+  /**
+   * Reload any cached data that may change while the inferior is running, such as address space maps
+   */
+  void reset();
+
   int getPointerSize();
 
   long lookupSymbol(String symbolName);

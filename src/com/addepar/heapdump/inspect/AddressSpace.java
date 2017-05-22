@@ -175,10 +175,12 @@ public final class AddressSpace {
     return inferior.isMapped(address);
   }
 
-  public void clearCache() {
+  public void reset() {
     ObjectIterator<Long2ObjectMap.Entry<ByteBuffer>> it = cache.long2ObjectEntrySet().fastIterator();
     while (it.hasNext()) {
       it.next().getValue().clear(); // set position less than limit, make hasRemaining() return true so that it reloads
     }
+
+    inferior.reset();
   }
 }
