@@ -17,7 +17,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * @author Geoff Lywood (geoff@addepar.com)
@@ -44,13 +44,11 @@ public final class StatisticalHeapInspector {
   private final PrintWriter out;
   private final Hotspot hotspot;
   private final HotspotHeap heap;
-  private final Random random;
 
   private StatisticalHeapInspector(PrintWriter out, Hotspot hotspot) {
     this.out = out;
     this.hotspot = hotspot;
     this.heap = hotspot.getHeap();
-    this.random = new Random();
   }
 
   private long getGcRunCount() {
@@ -81,7 +79,7 @@ public final class StatisticalHeapInspector {
     int totalHits = 0;
     for (int i = 0; i < SAMPLES; i++) {
 
-      long randomOffset = randomLong(totalSize);
+      long randomOffset = ThreadLocalRandom.current().nextLong(totalSize);
 
       for (Range<Long> liveRegion : liveRegions.asRanges()) {
         long bottom = liveRegion.lowerEndpoint();
@@ -114,19 +112,6 @@ public final class StatisticalHeapInspector {
     }
     node.hits++;
     node.size += object.getObjectSize(hotspot, klass);
-  }
-
-  // This is terrible as far as random number generators go.... given that there's a 48-bit LCG
-  // underlying it all, I'm not sure if this is remotely sound, even for small bounds.
-  // The algorithm is more or less copied from java.util.Random.nextInt(bound)
-  private long randomLong(long bound) {
-    long r = random.nextLong();
-    long m = bound - 1;
-    long u = r;
-    while (u - (r = u % bound) + m < 0) {
-      u = random.nextLong();
-    }
-    return r;
   }
 
   private void write(Graph graph, long totalHeapSize, int totalHits, long millis, long gcRuns) {
@@ -171,6 +156,11 @@ public final class StatisticalHeapInspector {
     Inferior inferior = new SelfInferior();
     Hotspot hotspot = new Hotspot(inferior);
     StatisticalHeapInspector dumper = new StatisticalHeapInspector(out, hotspot);
+    dumper.run();
+    out.println();
+    out.println("==========================================================================");
+    System.in.read();
+    out.println();
     dumper.run();
   }
 
