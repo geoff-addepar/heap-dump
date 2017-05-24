@@ -123,8 +123,8 @@ public final class StatisticalHeapInspector {
     out.println("Runtime:       " + millis + " ms");
     out.println("GC Runs:       " + gcRuns);
     out.println();
-    out.println("Hits | % of heap | Estimated Total Size | Estimated Number | Class");
-    out.println("------------------------------------------------------------------");
+    out.println("Hits | % of heap | Estimated Total Size | Estimated Number | Avg Instance Size | Class");
+    out.println("--------------------------------------------------------------------------------------");
     List<Node> sortedNodes = new ArrayList<>(graph.nodes.values());
     Collections.sort(sortedNodes, Comparator.comparing((Node node) -> node.hits).reversed());
     for (Node node : sortedNodes) {
@@ -137,8 +137,8 @@ public final class StatisticalHeapInspector {
       double sizeOfObject = (double) node.size / (double) node.hits;
       double estimatedSize = ((double) node.hits * (double) totalHeapSize) / (double) totalHits;
       double estimatedNumber = estimatedSize / sizeOfObject;
-      out.format("%4d | %8.1f%% | %20.0f | %16.0f | %s\n",
-          node.hits, estimatedPercent, estimatedSize, estimatedNumber, className);
+      out.format("%4d | %8.1f%% | %20.0f | %16.0f | %17.0f | %s\n",
+          node.hits, estimatedPercent, estimatedSize, estimatedNumber, sizeOfObject, className);
     }
     out.println();
     if (totalHits > MIN_TOTAL_HITS) {
