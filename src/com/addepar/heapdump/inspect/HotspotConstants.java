@@ -19,6 +19,9 @@ public class HotspotConstants {
   private final int layoutHelperHeaderSizeMask;
   private final int layoutHelperLog2ElementSizeShift;
   private final int layoutHelperLog2ElementSizeMask;
+  private final long markOopSizeShift;
+  private final long markOopCmsShift;
+  private final long markOopCmsMask;
 
   public HotspotConstants(AddressSpace space) {
     long hotSpotVMIntConstants = space.getPointer(space.lookupSymbol("gHotSpotVMIntConstants"));
@@ -62,6 +65,9 @@ public class HotspotConstants {
     layoutHelperHeaderSizeMask = intConstants.get("Klass::_lh_header_size_mask");
     layoutHelperLog2ElementSizeShift = intConstants.get("Klass::_lh_log2_element_size_shift");
     layoutHelperLog2ElementSizeMask = intConstants.get("Klass::_lh_log2_element_size_mask");
+    markOopSizeShift = longConstants.get("markOopDesc::size_shift");
+    markOopCmsShift = longConstants.get("markOopDesc::cms_shift");
+    markOopCmsMask = longConstants.get("markOopDesc::cms_mask");
   }
 
   public int getHeapWordSize() {
@@ -98,5 +104,17 @@ public class HotspotConstants {
 
   public int getLayoutHelperLog2ElementSizeMask() {
     return layoutHelperLog2ElementSizeMask;
+  }
+
+  public long getMarkOopSizeShift() {
+    return markOopSizeShift;
+  }
+
+  public long getMarkOopCmsShift() {
+    return markOopCmsShift;
+  }
+
+  public long getMarkOopCmsMask() {
+    return markOopCmsMask;
   }
 }
